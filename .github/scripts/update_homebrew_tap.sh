@@ -96,7 +96,9 @@ RUBY
 update_formula_file "${BASE_FORMULA_PATH}" "${FORMULA_CLASS_BASE}"
 
 if [[ "${UPDATE_VERSIONED_FORMULA}" == "1" ]]; then
-  if [[ ! -f "${VERSIONED_FORMULA_PATH}" ]]; then
+  if [[ "${SYNC_TEMPLATE_ALWAYS}" == "1" ]]; then
+    cp "${BASE_FORMULA_PATH}" "${VERSIONED_FORMULA_PATH}"
+  elif [[ ! -f "${VERSIONED_FORMULA_PATH}" ]]; then
     cp "${BASE_FORMULA_PATH}" "${VERSIONED_FORMULA_PATH}"
   fi
   update_formula_file "${VERSIONED_FORMULA_PATH}" "${FORMULA_CLASS_VERSIONED}"

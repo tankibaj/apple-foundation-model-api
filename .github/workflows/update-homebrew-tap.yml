@@ -35,6 +35,8 @@ jobs:
           REPO_SLUG: tankibaj/apple-foundation-model-api
           FORMULA_NAME: afm-api
           RELEASE_ASSET_NAME: afm-api-macos-arm64.tar.gz
+          TEMPLATE_FORMULA_PATH: Formula/afm-api.rb
+          SYNC_TEMPLATE_ALWAYS: "1"
         run: |
           ./.github/scripts/update_homebrew_tap.sh
 
