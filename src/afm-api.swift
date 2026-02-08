@@ -150,9 +150,30 @@ struct BridgeOutput: Codable {
     let total_tokens: Int
 }
 
+func encodeJSONObjectString(_ value: Any) -> String? {
+    guard JSONSerialization.isValidJSONObject(value),
+          let data = try? JSONSerialization.data(withJSONObject: value),
+          let text = String(data: data, encoding: .utf8) else {
+        return nil
+    }
+    return text
+}
+
 func makeToolCall(name: String, argsObj: Any) -> ToolCall {
-    let argsData = (try? JSONSerialization.data(withJSONObject: argsObj)) ?? Data("{}".utf8)
-    let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
+    let argsString: String
+    if let s = argsObj as? String {
+        if let data = s.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data),
+           let encoded = encodeJSONObjectString(json) {
+            argsString = encoded
+        } else {
+            argsString = "{\"value\":\(String(describing: s).debugDescription)}"
+        }
+    } else if let encoded = encodeJSONObjectString(argsObj) {
+        argsString = encoded
+    } else {
+        argsString = "{\"value\":\(String(describing: argsObj).debugDescription)}"
+    }
     return ToolCall(
         id: "call_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))",
         type: "function",
@@ -306,10 +327,10 @@ Conversation:
                 return BridgeOutput(content: content, tool_calls: nil, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0)
             }
             if let contentObj = parsed["content"] {
-                if let data = try? JSONSerialization.data(withJSONObject: contentObj),
-                   let textContent = String(data: data, encoding: .utf8) {
+                if let textContent = encodeJSONObjectString(contentObj) {
                     return BridgeOutput(content: textContent, tool_calls: nil, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0)
                 }
+                return BridgeOutput(content: String(describing: contentObj), tool_calls: nil, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0)
             }
         }
     }

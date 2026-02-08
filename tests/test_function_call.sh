@@ -29,6 +29,7 @@ resp="$(curl -s "$BASE_URL/$API_VERSION/chat/completions" \
 if command -v jq >/dev/null 2>&1; then
   finish_reason="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty')"
   tool_name="$(printf '%s' "$resp" | jq -r '.choices[0].message.tool_calls[0].function.name // empty')"
+  tool_args="$(printf '%s' "$resp" | jq -r '.choices[0].message.tool_calls[0].function.arguments // "{}"')"
 
   if [[ "$finish_reason" != "tool_calls" ]]; then
     echo "FAIL: expected finish_reason=tool_calls, got: $finish_reason"
@@ -55,3 +56,6 @@ else
 fi
 
 echo "PASS: function-calling is working"
+if command -v jq >/dev/null 2>&1; then
+  echo "PASS info: finish_reason=$finish_reason tool=$tool_name arguments=$tool_args"
+fi
