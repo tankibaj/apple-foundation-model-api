@@ -206,7 +206,7 @@ All with libraries you already use.
 
 **Custom configuration**
 ```bash
-afm-api --host 127.0.0.1 --port 8080 --model-name custom-model
+afm-api --host 127.0.0.1 --port 8080 --api-version latest
 ```
 
 **Development mode**
@@ -215,6 +215,15 @@ cd /path/to/repo
 ./afm-api build
 ./afm-api --background
 ./afm-api --logs --follow
+```
+
+**Runtime safety knobs**
+```bash
+# Release-user mode: never build Swift locally if server binary is missing
+AFM_API_REQUIRE_PREBUILT=1 afm-api --background
+
+# Tune background startup/shutdown wait windows
+AFM_API_STARTUP_TIMEOUT_SEC=30 AFM_API_SHUTDOWN_TIMEOUT_SEC=15 afm-api --background
 ```
 
 **SwiftPM layout (maintainers)**
@@ -295,7 +304,4 @@ We welcome contributions! Please:
 3. Submit a pull request
 
 ---
-
-**Questions or feedback?** We'd love to hear from you.
-
 Built with ❤️ for the Apple Silicon community

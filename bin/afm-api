@@ -94,6 +94,7 @@ validate_build_prereqs() {
 RUNTIME_DIR="${AFM_API_RUNTIME_DIR:-/tmp/afm-api}"
 PID_FILE="$RUNTIME_DIR/afm-api.pid"
 LOG_FILE="$RUNTIME_DIR/afm-api.log"
+LOCK_FILE="$RUNTIME_DIR/afm-api.lock"
 LOG_MAX_BYTES="${AFM_API_LOG_MAX_BYTES:-10485760}" # 10MB
 LOG_MAX_FILES="${AFM_API_LOG_MAX_FILES:-3}"
 mkdir -p "$RUNTIME_DIR"
@@ -153,9 +154,9 @@ resolve_version() {
 
   if command -v brew >/dev/null 2>&1; then
     local brew_version
-    brew_version="$(brew list --versions afm-api 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    brew_version="$(brew list --versions afm-api 2>/dev/null | awk '{print $NF}' | head -n1 || true)"
     if [[ -z "$brew_version" ]]; then
-      brew_version="$(brew list --versions afm-api-rc 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+      brew_version="$(brew list --versions afm-api-rc 2>/dev/null | awk '{print $NF}' | head -n1 || true)"
     fi
     if [[ -n "$brew_version" ]]; then
       echo "$brew_version"
@@ -229,11 +230,62 @@ has_arg() {
   shift
   local arg
   for arg in "$@"; do
-    if [[ "$arg" == "$needle" ]]; then
+    if [[ "$arg" == "$needle" || "$arg" == "$needle="* ]]; then
       return 0
     fi
   done
   return 1
+}
+
+get_arg_value() {
+  local needle="$1"
+  shift
+  local args=("$@")
+  local i arg
+  for ((i=0; i<${#args[@]}; i++)); do
+    arg="${args[$i]}"
+    if [[ "$arg" == "$needle" ]]; then
+      if (( i + 1 < ${#args[@]} )); then
+        echo "${args[$((i + 1))]}"
+      else
+        echo ""
+      fi
+      return
+    fi
+    if [[ "$arg" == "$needle="* ]]; then
+      echo "${arg#*=}"
+      return
+    fi
+  done
+  echo ""
+}
+
+normalize_probe_host() {
+  local host="$1"
+  case "$host" in
+    ""|"0.0.0.0"|"::"|"::0"|"[::]")
+      echo "127.0.0.1"
+      ;;
+    *)
+      echo "$host"
+      ;;
+  esac
+}
+
+LOCK_FD=0
+acquire_runtime_lock() {
+  if command -v flock >/dev/null 2>&1; then
+    exec {LOCK_FD}>"$LOCK_FILE"
+    flock -n "$LOCK_FD" || fail "Another afm-api launcher command is running. Retry in a moment."
+  fi
+}
+
+release_runtime_lock() {
+  if [[ "$LOCK_FD" -gt 0 ]]; then
+    flock -u "$LOCK_FD" >/dev/null 2>&1 || true
+    eval "exec ${LOCK_FD}>&-"
+    LOCK_FD=0
+  fi
 }
 
 subcommand="${1:-}"
@@ -286,22 +338,41 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+# Normalize GNU-style --key=value options to --key value so the Swift CLI parser
+# behaves consistently for host/port/api-version flags.
+normalized_passthrough=()
+for arg in "${passthrough[@]-}"; do
+  if [[ "$arg" == --*=* ]]; then
+    normalized_passthrough+=("${arg%%=*}" "${arg#*=}")
+  else
+    normalized_passthrough+=("$arg")
+  fi
+done
+passthrough=("${normalized_passthrough[@]}")
+
 if [[ "$show_version" == true ]]; then
   echo "afm-api $(resolve_version)"
   exit 0
 fi
 
 if [[ "$stop" == true ]]; then
+  acquire_runtime_lock
+  trap release_runtime_lock EXIT
   if is_running; then
     pid="$(cat "$PID_FILE")"
     kill "$pid" 2>/dev/null || true
-    for _ in {1..20}; do
+    shutdown_timeout="${AFM_API_SHUTDOWN_TIMEOUT_SEC:-10}"
+    checks=$((shutdown_timeout * 10))
+    for ((i=0; i<checks; i++)); do
       if kill -0 "$pid" 2>/dev/null; then
         sleep 0.1
       else
         break
       fi
     done
+    if kill -0 "$pid" 2>/dev/null; then
+      fail "Failed to stop afm-api (pid $pid) within ${shutdown_timeout}s."
+    fi
     rm -f "$PID_FILE"
     echo "Stopped afm-api (pid $pid)"
   else
@@ -353,6 +424,9 @@ if ! has_arg "--api-version" "${passthrough[@]-}"; then
 fi
 
 SERVER_BIN="$(resolve_server_bin)"
+if [[ -z "$SERVER_BIN" && "${AFM_API_REQUIRE_PREBUILT:-0}" == "1" ]]; then
+  fail "afm-api-server binary not found and AFM_API_REQUIRE_PREBUILT=1 disallows local builds. Reinstall via Homebrew."
+fi
 if [[ -z "$SERVER_BIN" && -n "$SOURCE_ROOT" && "${AFM_API_AUTO_BUILD:-1}" != "0" ]]; then
   info "No prebuilt afm-api-server found; building local server..."
   build_server 0
@@ -365,25 +439,51 @@ fi
 cmd=("$SERVER_BIN")
 
 if [[ "$background" == true ]]; then
+  acquire_runtime_lock
+  trap release_runtime_lock EXIT
   if is_running; then
     echo "afm-api already running (pid $(cat "$PID_FILE"))"
     echo "Logs: $LOG_FILE"
     exit 0
   fi
-  nohup "${cmd[@]}" "${passthrough[@]}" >>"$LOG_FILE" 2>&1 &
+  nohup "${cmd[@]}" "${passthrough[@]-}" >>"$LOG_FILE" 2>&1 &
   pid=$!
   echo "$pid" > "$PID_FILE"
-  sleep 0.2
-  if kill -0 "$pid" 2>/dev/null; then
+
+  startup_timeout="${AFM_API_STARTUP_TIMEOUT_SEC:-20}"
+  target_host="$(normalize_probe_host "$(get_arg_value --host "${passthrough[@]-}")")"
+  target_port="$(get_arg_value --port "${passthrough[@]-}")"
+  healthy=false
+
+  if command -v curl >/dev/null 2>&1; then
+    checks=$((startup_timeout * 2))
+    for ((i=0; i<checks; i++)); do
+      if ! kill -0 "$pid" 2>/dev/null; then
+        break
+      fi
+      if curl -fsS "http://${target_host}:${target_port}/v1/health" >/dev/null 2>&1; then
+        healthy=true
+        break
+      fi
+      sleep 0.5
+    done
+  else
+    sleep 0.2
+    if kill -0 "$pid" 2>/dev/null; then
+      healthy=true
+    fi
+  fi
+
+  if [[ "$healthy" == "true" ]]; then
     echo "afm-api started in background (pid $pid)"
     echo "Logs: $LOG_FILE"
   else
-    echo "afm-api failed to start. Logs:"
-    tail -n 80 "$LOG_FILE" || true
+    echo "afm-api failed to become ready. Logs:"
+    tail -n 120 "$LOG_FILE" || true
     rm -f "$PID_FILE"
     exit 1
   fi
   exit 0
 fi
 
-exec "${cmd[@]}" "${passthrough[@]}"
+exec "${cmd[@]}" "${passthrough[@]-}"
