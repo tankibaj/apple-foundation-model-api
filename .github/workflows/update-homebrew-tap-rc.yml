@@ -20,22 +20,23 @@ jobs:
         with:
           repository: tankibaj/homebrew-tap-prerelease
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
+          path: homebrew-tap-prerelease
 
       - name: Update RC formula
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-          TAP_REPO_PATH: homebrew-tap
+          TAP_REPO_PATH: homebrew-tap-prerelease
           REPO_SLUG: tankibaj/apple-foundation-model-api
           FORMULA_NAME: afm-api-rc
           RELEASE_ASSET_NAME: afm-api-macos-arm64.tar.gz
           UPDATE_VERSIONED_FORMULA: "0"
           TEMPLATE_FORMULA_PATH: Formula/afm-api-rc.rb
+          SYNC_TEMPLATE_ALWAYS: "1"
         run: |
           ./.github/scripts/update_homebrew_tap.sh
 
       - name: Commit and push RC formula updates
-        working-directory: homebrew-tap
+        working-directory: homebrew-tap-prerelease
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

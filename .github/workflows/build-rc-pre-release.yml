@@ -81,6 +81,7 @@ jobs:
           RELEASE_ASSET_NAME: afm-api-macos-arm64.tar.gz
           UPDATE_VERSIONED_FORMULA: "0"
           TEMPLATE_FORMULA_PATH: Formula/afm-api-rc.rb
+          SYNC_TEMPLATE_ALWAYS: "1"
         run: |
           ./.github/scripts/update_homebrew_tap.sh
 

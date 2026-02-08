@@ -10,6 +10,7 @@ REPO_SLUG="${REPO_SLUG:-tankibaj/apple-foundation-model-api}"
 FORMULA_NAME="${FORMULA_NAME:-afm-api}"
 UPDATE_VERSIONED_FORMULA="${UPDATE_VERSIONED_FORMULA:-1}"
 TEMPLATE_FORMULA_PATH="${TEMPLATE_FORMULA_PATH:-}"
+SYNC_TEMPLATE_ALWAYS="${SYNC_TEMPLATE_ALWAYS:-0}"
 
 if [[ -z "${RELEASE_TAG}" || -z "${TAP_REPO_PATH}" ]]; then
   echo "Usage: RELEASE_TAG=v1.0.2 TAP_REPO_PATH=/path/to/homebrew-tap $0"
@@ -32,13 +33,15 @@ URL="${RELEASE_ASSET_URL:-https://github.com/${REPO_SLUG}/releases/download/${RE
 BASE_FORMULA_PATH="${TAP_REPO_PATH}/Formula/${FORMULA_NAME}.rb"
 VERSIONED_FORMULA_PATH="${TAP_REPO_PATH}/Formula/${FORMULA_NAME}@${MAJOR_MINOR}.rb"
 
-if [[ ! -f "${BASE_FORMULA_PATH}" ]]; then
-  if [[ -n "${TEMPLATE_FORMULA_PATH}" && -f "${TEMPLATE_FORMULA_PATH}" ]]; then
+if [[ -n "${TEMPLATE_FORMULA_PATH}" && -f "${TEMPLATE_FORMULA_PATH}" ]]; then
+  if [[ "${SYNC_TEMPLATE_ALWAYS}" == "1" || ! -f "${BASE_FORMULA_PATH}" ]]; then
     cp "${TEMPLATE_FORMULA_PATH}" "${BASE_FORMULA_PATH}"
-  else
-    echo "ERROR: base formula not found: ${BASE_FORMULA_PATH}"
-    exit 1
   fi
+fi
+
+if [[ ! -f "${BASE_FORMULA_PATH}" ]]; then
+  echo "ERROR: base formula not found: ${BASE_FORMULA_PATH}"
+  exit 1
 fi
 
 TMP_ASSET=""

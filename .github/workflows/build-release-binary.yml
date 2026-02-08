@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build-and-publish:
+    if: github.event_name != 'release' || github.event.release.prerelease == false
     runs-on: macos-latest
     steps:
       - name: Checkout

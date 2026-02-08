@@ -126,7 +126,9 @@ else
 fi
 
 resolve_version() {
-  if [[ "$EMBEDDED_VERSION" != "__AFM_API_VERSION__" && -n "$EMBEDDED_VERSION" ]]; then
+  # When packaged, EMBEDDED_VERSION is replaced with a concrete version string.
+  # Keep this check resilient to in-place replacement by avoiding exact placeholder literals.
+  if [[ -n "$EMBEDDED_VERSION" && "$EMBEDDED_VERSION" != *"AFM_API_VERSION"* ]]; then
     echo "$EMBEDDED_VERSION"
     return
   fi
@@ -143,6 +145,9 @@ resolve_version() {
   if command -v brew >/dev/null 2>&1; then
     local brew_version
     brew_version="$(brew list --versions afm-api 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    if [[ -z "$brew_version" ]]; then
+      brew_version="$(brew list --versions afm-api-rc 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    fi
     if [[ -n "$brew_version" ]]; then
       echo "$brew_version"
       return

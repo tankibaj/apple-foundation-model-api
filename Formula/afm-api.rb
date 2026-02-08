@@ -17,7 +17,10 @@ class AfmApi < Formula
       bin.install "bin/afm-api"
       pkgshare.install "Package.swift"
       pkgshare.install "Sources"
-      inreplace bin/"afm-api", "__AFM_API_VERSION__", version.to_s
+      launcher = bin/"afm-api"
+      if launcher.read.include?("__AFM_API_VERSION__")
+        inreplace launcher, "__AFM_API_VERSION__", version.to_s
+      end
     end
   end
 
