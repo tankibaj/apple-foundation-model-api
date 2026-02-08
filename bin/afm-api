@@ -5,6 +5,88 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export SWIFT_MODULECACHE_PATH="${SWIFT_MODULECACHE_PATH:-/tmp/afm-api-swift-module-cache}"
 mkdir -p "$SWIFT_MODULECACHE_PATH"
 
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[1;33m'
+  BLUE='\033[0;34m'
+  NC='\033[0m'
+else
+  RED=''
+  GREEN=''
+  YELLOW=''
+  BLUE=''
+  NC=''
+fi
+
+info() { echo -e "${BLUE}ℹ️  $*${NC}"; }
+ok() { echo -e "${GREEN}✅ $*${NC}"; }
+warn() { echo -e "${YELLOW}⚠️  $*${NC}"; }
+fail() { echo -e "${RED}❌ $*${NC}" >&2; exit 1; }
+
+version_ge() {
+  local current="$1"
+  local required="$2"
+  [[ "$(printf '%s\n%s\n' "$required" "$current" | sort -V | tail -n1)" == "$current" ]]
+}
+
+check_macos_version() {
+  [[ "$(uname -s)" == "Darwin" ]] || fail "afm-api only runs on macOS."
+
+  local required="26.0"
+  local detected
+  detected="$(sw_vers -productVersion 2>/dev/null || true)"
+  [[ -n "$detected" ]] || fail "Unable to read macOS version via sw_vers."
+
+  info "Detected macOS $detected"
+  if version_ge "$detected" "$required"; then
+    ok "macOS version check passed (required >= $required)."
+  else
+    fail "macOS $detected is not supported. Required >= $required."
+  fi
+}
+
+check_swift_toolchain() {
+  command -v swift >/dev/null 2>&1 || fail "Swift compiler not found. Install Xcode Command Line Tools."
+
+  local output swift_version
+  output="$(swift --version 2>&1 || true)"
+  swift_version="$(printf '%s\n' "$output" | sed -nE 's/.*Apple Swift version ([0-9]+\.[0-9]+).*/\1/p' | head -n1)"
+
+  if [[ -z "$swift_version" ]]; then
+    warn "Could not parse Swift version from 'swift --version'. Continuing."
+    return
+  fi
+
+  info "Detected Swift $swift_version"
+  if version_ge "$swift_version" "6.0"; then
+    ok "Swift toolchain check passed."
+  else
+    warn "Swift $swift_version may be older than recommended (6.0+). Continuing."
+  fi
+}
+
+check_xcode_clt() {
+  if ! command -v xcode-select >/dev/null 2>&1; then
+    warn "xcode-select not found; build may fail without Xcode Command Line Tools."
+    return
+  fi
+
+  local dev_dir
+  dev_dir="$(xcode-select -p 2>/dev/null || true)"
+  if [[ -n "$dev_dir" ]]; then
+    ok "Xcode Command Line Tools detected at $dev_dir."
+  else
+    warn "Xcode Command Line Tools not configured; build may fail."
+  fi
+}
+
+validate_build_prereqs() {
+  check_macos_version
+  check_swift_toolchain
+  check_xcode_clt
+}
+
 RUNTIME_DIR="${AFM_API_RUNTIME_DIR:-/tmp/afm-api}"
 PID_FILE="$RUNTIME_DIR/afm-api.pid"
 LOG_FILE="$RUNTIME_DIR/afm-api.log"
@@ -159,11 +241,14 @@ if ! has_arg "--api-version" "${passthrough[@]-}"; then
 fi
 
 build_server() {
+  validate_build_prereqs
+  info "Building afm-api-server (release)..."
   swift build \
     --package-path "$SOURCE_ROOT" \
     --scratch-path "$BUILD_DIR" \
     -c release \
     --product afm-api-server
+  ok "Build complete."
 }
 
 if [[ "$rebuild" == true ]]; then
