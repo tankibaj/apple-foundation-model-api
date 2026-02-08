@@ -3,6 +3,31 @@
 import Foundation
 import FoundationModels
 import Network
+import Darwin
+
+let logFilePath = ProcessInfo.processInfo.environment["AFM_API_LOG_FILE"]
+let logFileLock = NSLock()
+let stdoutIsTTY = isatty(fileno(stdout)) == 1
+
+func logLine(_ message: String) {
+    if stdoutIsTTY {
+        print(message)
+    }
+    guard let path = logFilePath, !path.isEmpty else { return }
+    logFileLock.lock()
+    defer { logFileLock.unlock() }
+    let line = message + "\n"
+    guard let data = line.data(using: .utf8) else { return }
+    if FileManager.default.fileExists(atPath: path) {
+        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: path)) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        }
+    } else {
+        FileManager.default.createFile(atPath: path, contents: data)
+    }
+}
 
 struct BridgeInput: Codable {
     let model: String
@@ -326,17 +351,49 @@ final class RequestProcessor {
     }
 
     func handle(method: String, path: String, body: Data) async -> Data {
+        let started = Date()
+        func finish(_ status: Int, _ payload: Any) -> Data {
+            let ms = Int(Date().timeIntervalSince(started) * 1000.0)
+            logLine("[\(status)] \(method) \(path) \(ms)ms")
+            return httpResponse(status: status, body: jsonData(payload))
+        }
+
         if method == "GET" && path == "/healthz" {
-            return httpResponse(status: 200, body: jsonData(["ok": true]))
+            return finish(200, ["ok": true])
         }
 
         let apiBase = apiBasePath(cfg.apiVersion)
 
         if method == "GET" && path == "\(apiBase)" {
-            return httpResponse(status: 200, body: jsonData([
+            return finish(200, [
                 "object": "api.version",
                 "version": cfg.apiVersion
-            ]))
+            ])
+        }
+
+        if method == "GET" && path == "\(apiBase)/health" {
+            do {
+                _ = try await runModel(input: BridgeInput(
+                    model: cfg.modelName,
+                    messages: [ChatMessage(role: "user", content: "ping", name: nil, tool_calls: nil)],
+                    tools: [],
+                    tool_choice: .none,
+                    temperature: 0.0,
+                    max_output_tokens: 8
+                ))
+                return finish(200, [
+                    "ok": true,
+                    "check": "model",
+                    "model": cfg.modelName
+                ])
+            } catch {
+                return finish(500, [
+                    "ok": false,
+                    "check": "model",
+                    "model": cfg.modelName,
+                    "error": String(describing: error)
+                ])
+            }
         }
 
         if method == "GET" && path == "\(apiBase)/models" {
@@ -349,11 +406,11 @@ final class RequestProcessor {
                     "owned_by": "apple"
                 ]]
             ]
-            return httpResponse(status: 200, body: jsonData(payload))
+            return finish(200, payload)
         }
 
         guard method == "POST" && path == "\(apiBase)/chat/completions" else {
-            return httpResponse(status: 404, body: jsonData(["error": ["message": "Not found", "type": "invalid_request_error"]]))
+            return finish(404, ["error": ["message": "Not found", "type": "invalid_request_error"]])
         }
 
         let decoder = JSONDecoder()
@@ -361,15 +418,15 @@ final class RequestProcessor {
         do {
             req = try decoder.decode(ChatCompletionsRequest.self, from: body)
         } catch {
-            return httpResponse(status: 400, body: jsonData(["error": ["message": "Invalid JSON", "type": "invalid_request_error"]]))
+            return finish(400, ["error": ["message": "Invalid JSON", "type": "invalid_request_error"]])
         }
 
         if req.stream == true {
-            return httpResponse(status: 400, body: jsonData(["error": ["message": "stream=true is not implemented yet", "type": "invalid_request_error"]]))
+            return finish(400, ["error": ["message": "stream=true is not implemented yet", "type": "invalid_request_error"]])
         }
 
         if req.messages.isEmpty {
-            return httpResponse(status: 400, body: jsonData(["error": ["message": "messages must be a non-empty array", "type": "invalid_request_error"]]))
+            return finish(400, ["error": ["message": "messages must be a non-empty array", "type": "invalid_request_error"]])
         }
 
         let bridgeInput = BridgeInput(
@@ -423,9 +480,9 @@ final class RequestProcessor {
                 ]
             ]
 
-            return httpResponse(status: 200, body: jsonData(payload))
+            return finish(200, payload)
         } catch {
-            return httpResponse(status: 500, body: jsonData(["error": ["message": "Bridge process failed: \(error)", "type": "server_error"]]))
+            return finish(500, ["error": ["message": "Bridge process failed: \(error)", "type": "server_error"]])
         }
     }
 }
@@ -583,7 +640,7 @@ listener.newConnectionHandler = { connection in
     handler.start()
 }
 listener.start(queue: .main)
-print("afm-api server listening on http://\(cfg.host):\(cfg.port)")
-print("API version: \(cfg.apiVersion)")
-print("Model id: \(cfg.modelName)")
+logLine("afm-api server listening on http://\(cfg.host):\(cfg.port)")
+logLine("API version: \(cfg.apiVersion)")
+logLine("Model id: \(cfg.modelName)")
 RunLoop.main.run()

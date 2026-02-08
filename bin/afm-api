@@ -9,6 +9,7 @@ RUNTIME_DIR="${AFM_API_RUNTIME_DIR:-/tmp/afm-api}"
 PID_FILE="$RUNTIME_DIR/afm-api.pid"
 LOG_FILE="$RUNTIME_DIR/afm-api.log"
 mkdir -p "$RUNTIME_DIR"
+export AFM_API_LOG_FILE="$LOG_FILE"
 
 DEFAULT_HOST="${AFM_API_HOST:-127.0.0.1}"
 DEFAULT_PORT="${AFM_API_PORT:-8000}"
@@ -53,13 +54,13 @@ while [[ $# -gt 0 ]]; do
     --background|-d)
       background=true
       ;;
-    --stop)
+    --stop|-stop)
       stop=true
       ;;
-    --status)
+    --status|-status)
       status=true
       ;;
-    --logs)
+    --logs|-logs)
       logs=true
       ;;
     --follow|-f)
