@@ -18,7 +18,7 @@ jobs:
       - name: Checkout Homebrew tap
         uses: actions/checkout@v4
         with:
-          repository: tankibaj/homebrew-tap
+          repository: tankibaj/homebrew-tap-prerelease
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 

@@ -32,7 +32,8 @@ jobs:
             TAG="${{ inputs.release_tag }}"
           else
             BRANCH_SLUG="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
-            TAG="v0.0.0-rc.${BRANCH_SLUG}"
+            SHORT_SHA="$(git rev-parse --short "${GITHUB_SHA}")"
+            TAG="v0.0.0-rc.${BRANCH_SLUG}.${SHORT_SHA}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -49,27 +50,46 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
-          gh release delete "$TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --notes "Automated pre-release for branch ${GITHUB_REF_NAME}." \
-            --draft \
-            --prerelease
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes "Automated pre-release for branch ${GITHUB_REF_NAME}." \
+              --prerelease
+          fi
+
+          gh release edit "$TAG" --draft=false --prerelease
 
           gh release upload "$TAG" \
             "${{ steps.package.outputs.asset_path }}" \
             "${{ steps.package.outputs.sha_path }}" \
             --clobber
 
-      - name: Trigger Homebrew RC tap update
+      - name: Checkout Homebrew prerelease tap
+        uses: actions/checkout@v4
+        with:
+          repository: tankibaj/homebrew-tap-prerelease
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap-prerelease
+
+      - name: Update prerelease tap formula
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.vars.outputs.tag }}
+          TAP_REPO_PATH: homebrew-tap-prerelease
+          REPO_SLUG: tankibaj/apple-foundation-model-api
+          FORMULA_NAME: afm-api-rc
+          RELEASE_ASSET_NAME: afm-api-macos-arm64.tar.gz
+          UPDATE_VERSIONED_FORMULA: "0"
+          TEMPLATE_FORMULA_PATH: Formula/afm-api-rc.rb
         run: |
-          if gh workflow run update-homebrew-tap-rc.yml \
-            --ref "${GITHUB_REF_NAME}" \
-            -f release_tag="${{ steps.vars.outputs.tag }}"; then
-            echo "Triggered Update Homebrew Tap RC"
-          else
-            echo "Skipping Update Homebrew Tap RC (workflow must exist on default branch for workflow_dispatch)."
-          fi
+          ./.github/scripts/update_homebrew_tap.sh
+
+      - name: Commit and push prerelease tap updates
+        working-directory: homebrew-tap-prerelease
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/afm-api-rc.rb
+          git diff --cached --quiet && echo "No prerelease formula changes" && exit 0
+          git commit -m "feat: afm-api-rc ${{ steps.vars.outputs.tag }}"
+          git push origin HEAD
