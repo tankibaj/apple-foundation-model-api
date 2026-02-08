@@ -2,13 +2,6 @@
 
 > Apple Intelligence API that follows OpenAI API standards, runs entirely on your Mac with full tool calling for building agents.
 
-**What it does:**
-- Complete privacy - runs entirely on your Mac
-- Apple's native foundation model - optimized, zero maintenance
-- Full tool calling support for building agents
-- Zero API costs - use it endlessly
-- Works instantly with your existing OpenAI libraries.
-
 ---
 
 ## Quick start
