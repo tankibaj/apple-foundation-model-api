@@ -54,6 +54,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --notes "Automated pre-release for branch ${GITHUB_REF_NAME}." \
+            --draft \
             --prerelease
 
           gh release upload "$TAG" \
