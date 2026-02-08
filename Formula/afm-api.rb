@@ -9,14 +9,14 @@ class AfmApi < Formula
 
   def install
     bin.install "bin/afm-api"
-    pkgshare.install "src/afm.swift"
+    pkgshare.install "src/afm-api.swift"
 
     # Make the launcher reference the Homebrew-installed Swift source path.
-    inreplace bin/"afm-api", %r{\$SCRIPT_DIR/\.\./src/afm.swift}, "#{pkgshare}/afm.swift"
+    inreplace bin/"afm-api", %r{\$SCRIPT_DIR/\.\./src/afm-api.swift}, "#{pkgshare}/afm-api.swift"
   end
 
   test do
     assert_predicate bin/"afm-api", :exist?
-    assert_predicate pkgshare/"afm.swift", :exist?
+    assert_predicate pkgshare/"afm-api.swift", :exist?
   end
 end

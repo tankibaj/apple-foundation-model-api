@@ -1,52 +1,62 @@
-# Apple Foundation Model OpenAI-Compatible Server
+# Apple Foundation Model API
 
-Headless CLI server that exposes Apple Foundation Model via OpenAI-compatible endpoints.
+OpenAI-compatible local API server on top of Apple's Foundation Models framework.
 
-## What it provides
+## Why use this
 
-- `GET /v1/models`
-- `POST /v1/chat/completions`
-- OpenAI-style request/response payloads
-- Tool calling support (`tools`, `tool_choice`) compatible with OpenAI chat-completions semantics
+- Privacy: inference runs locally on your Mac when supported.
+- Zero per-request cloud API cost for local inference.
+- Apple silicon optimized runtime path via Apple's stack.
+- OpenAI-compatible API for easy drop-in integration.
 
 ## Requirements
 
-- macOS with Apple Intelligence enabled
-- Xcode toolchain with Swift Concurrency support
-- Access to Apple's `FoundationModels` framework on your OS/Xcode version
+- macOS with Apple Intelligence enabled.
+- Apple Intelligence-compatible hardware.
+- Xcode command-line tools + Swift runtime.
 
-## Quick start
+## Install (Global, No Clone)
 
-Run native Swift server directly:
+Recommended distribution for users:
 
 ```bash
-./bin/afm-api --host 127.0.0.1 --port 8000 --api-version v1
+brew tap tankibaj/tap
+brew install afm-api
 ```
 
-## Homebrew Formula
+Then run from anywhere:
 
-A formula template is included at:
+```bash
+afm-api
+```
 
-- `Formula/afm-api.rb`
+If command is not found:
 
-Before publishing, update:
+```bash
+brew link afm-api
+```
 
-- `url` tag version (for example `v0.1.0`)
-- `sha256` with the real release tarball checksum
+## Quick Start
 
-This exposes the same endpoints:
-- `GET /healthz`
-- `GET /v1`
-- `GET /v1/models`
-- `POST /v1/chat/completions`
+1. Start server (defaults: host `127.0.0.1`, port `8000`, latest API version):
 
-Change API namespace with `--api-version` (for example `--api-version v2` exposes `/v2/...`).
+```bash
+afm-api
+```
 
-## Example
+2. Health/API version:
+
+```bash
+curl -s http://127.0.0.1:8000/v1
+```
+
+3. List models:
 
 ```bash
 curl -s http://127.0.0.1:8000/v1/models | jq
 ```
+
+4. First completion:
 
 ```bash
 curl -s http://127.0.0.1:8000/v1/chat/completions \
@@ -60,50 +70,74 @@ curl -s http://127.0.0.1:8000/v1/chat/completions \
   }' | jq
 ```
 
-### Tool calling example
+## Background Mode
+
+Start:
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{
-    "model": "apple-foundation-model",
-    "messages": [
-      {"role":"user","content":"What is the weather in SF?"}
-    ],
-    "tools": [{
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get weather",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {"type": "string"}
-          },
-          "required": ["city"]
-        }
-      }
-    }]
-  }' | jq
+afm-api --background
 ```
 
-If the model decides to call a tool, response includes `choices[0].message.tool_calls` with JSON arguments.
-
-## Test function calling
-
-In a second terminal (while server is running):
+Status:
 
 ```bash
-./tests/test_function_call.sh http://127.0.0.1:8000
+afm-api --status
 ```
 
-Expected output:
+Logs:
 
-```text
-PASS: function-calling is working
+```bash
+afm-api --logs
 ```
+
+Follow logs:
+
+```bash
+afm-api --logs --follow
+```
+
+Stop:
+
+```bash
+afm-api --stop
+```
+
+## Advanced
+
+Run with custom options:
+
+```bash
+afm-api \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --api-version v1 \
+  --model-name apple-foundation-model
+```
+
+- `--api-version latest` is default (currently `v1`).
+- `--api-version v2` exposes `/v2/...`.
+
+Tool-calling smoke test:
+
+```bash
+API_VERSION=v1 ./tests/test_function_call.sh http://127.0.0.1:8000
+```
+
+## Maintainers
+
+Homebrew formula file in this repo:
+
+- `Formula/afm-api.rb`
+
+Before release, update formula `url` and `sha256`.
+
+## Apple References
+
+- [Apple Intelligence overview](https://www.apple.com/apple-intelligence/)
+- [Apple Intelligence for developers](https://developer.apple.com/apple-intelligence/whats-new/)
+- [Machine Learning & AI updates](https://developer.apple.com/machine-learning/whats-new/)
+- [Apple Intelligence and privacy](https://support.apple.com/guide/iphone/apple-intelligence-and-privacy-iphe3f499e0e/ios)
 
 ## Notes
 
-- Streaming (`stream=true`) is currently not implemented.
-- Tool call generation is done with a strict JSON contract prompt so it works even when native function-calling APIs vary by OS release.
+- `stream=true` is not implemented.
