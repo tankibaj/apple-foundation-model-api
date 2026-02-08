@@ -98,6 +98,7 @@ DEFAULT_HOST="${AFM_API_HOST:-127.0.0.1}"
 DEFAULT_PORT="${AFM_API_PORT:-8000}"
 DEFAULT_API_VERSION="${AFM_API_VERSION:-latest}"
 DEFAULT_SOURCE_ROOT="${AFM_API_SOURCE_ROOT:-}"
+EMBEDDED_VERSION="__AFM_API_VERSION__"
 
 resolve_source_root() {
   if [[ -n "$DEFAULT_SOURCE_ROOT" && -f "$DEFAULT_SOURCE_ROOT/Package.swift" ]]; then
@@ -118,11 +119,34 @@ resolve_source_root() {
   echo ""
 }
 
+resolve_version() {
+  if [[ "$EMBEDDED_VERSION" != "__AFM_API_VERSION__" && -n "$EMBEDDED_VERSION" ]]; then
+    echo "$EMBEDDED_VERSION"
+    return
+  fi
+
+  if [[ -n "${SOURCE_ROOT:-}" && -d "${SOURCE_ROOT}/.git" ]] && command -v git >/dev/null 2>&1; then
+    local git_version
+    git_version="$(git -C "$SOURCE_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
+    if [[ -n "$git_version" ]]; then
+      echo "$git_version"
+      return
+    fi
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    local brew_version
+    brew_version="$(brew list --versions afm-api 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    if [[ -n "$brew_version" ]]; then
+      echo "$brew_version"
+      return
+    fi
+  fi
+
+  echo "unknown"
+}
+
 SOURCE_ROOT="$(resolve_source_root)"
-if [[ -z "$SOURCE_ROOT" ]]; then
-  echo "Could not locate Package.swift for afm-api. Set AFM_API_SOURCE_ROOT."
-  exit 1
-fi
 
 BUILD_DIR="${AFM_API_BUILD_DIR:-$RUNTIME_DIR/build}"
 SERVER_BIN="$BUILD_DIR/release/afm-api-server"
@@ -160,6 +184,7 @@ status=false
 logs=false
 follow=false
 rebuild=false
+show_version=false
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
@@ -182,12 +207,20 @@ while [[ $# -gt 0 ]]; do
     --rebuild)
       rebuild=true
       ;;
+    --version|-v)
+      show_version=true
+      ;;
     *)
       passthrough+=("$1")
       ;;
   esac
   shift
 done
+
+if [[ "$show_version" == true ]]; then
+  echo "afm-api $(resolve_version)"
+  exit 0
+fi
 
 if [[ "$stop" == true ]]; then
   if is_running; then
@@ -229,6 +262,10 @@ if [[ "$logs" == true ]]; then
     tail -n 200 "$LOG_FILE"
   fi
   exit 0
+fi
+
+if [[ -z "$SOURCE_ROOT" ]]; then
+  fail "Could not locate Package.swift for afm-api. Set AFM_API_SOURCE_ROOT."
 fi
 
 if ! has_arg "--host" "${passthrough[@]-}"; then

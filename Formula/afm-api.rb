@@ -11,6 +11,7 @@ class AfmApi < Formula
     bin.install "bin/afm-api"
     pkgshare.install "Package.swift"
     pkgshare.install "Sources"
+    inreplace bin/"afm-api", "__AFM_API_VERSION__", version.to_s
   end
 
   test do
