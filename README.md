@@ -59,6 +59,7 @@ afm-api --background      # Run in background
 afm-api --status          # Check status
 afm-api --logs            # View logs
 afm-api --stop            # Stop server
+afm-api --rebuild         # Rebuild server binary from source
 ```
 
 ---
@@ -211,6 +212,21 @@ afm-api --host 127.0.0.1 --port 8080 --model-name custom-model
 cd /path/to/repo
 ./afm-api --background
 ./afm-api --logs --follow
+```
+
+**SwiftPM layout (maintainers)**
+```text
+Package.swift
+Sources/AFMAPI/openai_api
+Sources/AFMAPI/capabilities
+Sources/AFMAPI/models
+Sources/AFMAPI/support
+Sources/AFMAPI/server
+```
+
+**Build manually**
+```bash
+swift build -c release --product afm-api-server
 ```
 
 **Run tests**
