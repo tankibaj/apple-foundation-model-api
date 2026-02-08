@@ -173,7 +173,7 @@ smoke_test_homebrew_release() {
   brew reinstall tankibaj/tap/afm-api
 
   local installed_version
-  installed_version="$(brew info tankibaj/tap/afm-api --json=v2 | jq -r '.[0].versions.stable')"
+  installed_version="$(brew info tankibaj/tap/afm-api --json=v2 | jq -r 'if type=="array" then .[0].versions.stable else .formulae[0].versions.stable end')"
   [[ "$installed_version" == "$expected_version" ]] || fail "Installed brew version ($installed_version) does not match expected ($expected_version)."
 
   local cli_version
