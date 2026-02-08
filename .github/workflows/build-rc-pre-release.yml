@@ -65,6 +65,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run update-homebrew-tap-rc.yml \
+          if gh workflow run update-homebrew-tap-rc.yml \
             --ref "${GITHUB_REF_NAME}" \
-            -f release_tag="${{ steps.vars.outputs.tag }}"
+            -f release_tag="${{ steps.vars.outputs.tag }}"; then
+            echo "Triggered Update Homebrew Tap RC"
+          else
+            echo "Skipping Update Homebrew Tap RC (workflow must exist on default branch for workflow_dispatch)."
+          fi
