@@ -67,17 +67,14 @@ check_swift_toolchain() {
 }
 
 check_xcode_clt() {
-  if ! command -v xcode-select >/dev/null 2>&1; then
-    warn "xcode-select not found; build may fail without Xcode Command Line Tools."
-    return
-  fi
+  command -v xcode-select >/dev/null 2>&1 || fail "xcode-select not found. Install Xcode Command Line Tools: xcode-select --install"
 
   local dev_dir
   dev_dir="$(xcode-select -p 2>/dev/null || true)"
   if [[ -n "$dev_dir" ]]; then
     ok "Xcode Command Line Tools detected at $dev_dir."
   else
-    warn "Xcode Command Line Tools not configured; build may fail."
+    fail "Xcode Command Line Tools not configured. Run: xcode-select --install"
   fi
 }
 
@@ -90,8 +87,12 @@ validate_build_prereqs() {
 RUNTIME_DIR="${AFM_API_RUNTIME_DIR:-/tmp/afm-api}"
 PID_FILE="$RUNTIME_DIR/afm-api.pid"
 LOG_FILE="$RUNTIME_DIR/afm-api.log"
+LOG_MAX_BYTES="${AFM_API_LOG_MAX_BYTES:-10485760}" # 10MB
+LOG_MAX_FILES="${AFM_API_LOG_MAX_FILES:-3}"
 mkdir -p "$RUNTIME_DIR"
 export AFM_API_LOG_FILE="$LOG_FILE"
+export AFM_API_LOG_MAX_BYTES="$LOG_MAX_BYTES"
+export AFM_API_LOG_MAX_FILES="$LOG_MAX_FILES"
 
 DEFAULT_HOST="${AFM_API_HOST:-127.0.0.1}"
 DEFAULT_PORT="${AFM_API_PORT:-8000}"
