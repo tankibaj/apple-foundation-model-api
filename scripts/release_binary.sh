@@ -135,6 +135,7 @@ find_recent_update_tap_run() {
     --limit 50 \
     --json databaseId,createdAt,event,headBranch,status,conclusion \
     | jq -r --argjson since "$since_epoch" --arg tag "$expected_tag" '
+      .
       | map(. + {ts: (.createdAt | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime)})
       | map(select(.ts >= ($since - 5)))
       | map(select((.event == "release" and .headBranch == $tag) or .event == "workflow_dispatch"))
@@ -187,13 +188,21 @@ smoke_test_homebrew_release() {
 
   AFM_API_RUNTIME_DIR="$runtime_dir" afm-api --background --port "$port"
 
-  set +e
-  health="$(curl -fsS "http://127.0.0.1:${port}/v1/health")"
-  curl_status=$?
-  set -e
+  local health_ok=0
+  for _ in {1..30}; do
+    set +e
+    health="$(curl -fsS "http://127.0.0.1:${port}/v1/health" 2>/dev/null)"
+    curl_status=$?
+    set -e
+    if [[ $curl_status -eq 0 ]]; then
+      health_ok=1
+      break
+    fi
+    sleep 1
+  done
 
-  if [[ $curl_status -ne 0 ]]; then
-    warn "Health check failed. Log tail:"
+  if [[ $health_ok -ne 1 ]]; then
+    warn "Health check failed after retries. Log tail:"
     tail -n 120 "$runtime_dir/afm-api.log" || true
     AFM_API_RUNTIME_DIR="$runtime_dir" afm-api --stop >/dev/null 2>&1 || true
     rm -rf "$runtime_dir"
