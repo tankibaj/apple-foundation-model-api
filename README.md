@@ -218,6 +218,12 @@ cd /path/to/repo
 ./tests/test_function_call.sh http://127.0.0.1:8000
 ```
 
+**Update**
+```bash
+brew update
+brew upgrade afm-api
+```
+
 ---
 ## What's coming soon
 
