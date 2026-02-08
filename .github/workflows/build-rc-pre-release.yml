@@ -33,7 +33,7 @@ jobs:
           else
             BRANCH_SLUG="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
             SHORT_SHA="$(git rev-parse --short "${GITHUB_SHA}")"
-            TAG="v0.0.0-rc.${BRANCH_SLUG}.${SHORT_SHA}"
+            TAG="v0.0.0-rc.${BRANCH_SLUG}.r${GITHUB_RUN_NUMBER}.${SHORT_SHA}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
