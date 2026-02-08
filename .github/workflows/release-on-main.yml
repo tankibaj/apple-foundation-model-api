@@ -107,6 +107,15 @@ jobs:
             --title "$tag" \
             --generate-notes
 
+      - name: Trigger binary build and stable tap update
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run "Build Release Binary" \
+            --ref main \
+            -f release_tag="${{ steps.version.outputs.next_tag }}"
+
       - name: Summary
         run: |
           echo "should_release=${{ steps.version.outputs.should_release }}"
