@@ -129,14 +129,15 @@ compute_next_tag() {
 
 find_recent_update_tap_run() {
   local since_epoch="$1"
+  local expected_tag="$2"
   gh run list \
     --workflow "Update Homebrew Tap" \
-    --limit 30 \
+    --limit 50 \
     --json databaseId,createdAt,event,headBranch,status,conclusion \
-    | jq -r --argjson since "$since_epoch" '
-      map(select(.headBranch == "main"))
+    | jq -r --argjson since "$since_epoch" --arg tag "$expected_tag" '
       | map(. + {ts: (.createdAt | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime)})
-      | map(select(.ts >= $since))
+      | map(select(.ts >= ($since - 5)))
+      | map(select((.event == "release" and .headBranch == $tag) or .event == "workflow_dispatch"))
       | sort_by(.ts)
       | reverse
       | .[0].databaseId // empty
@@ -145,10 +146,11 @@ find_recent_update_tap_run() {
 
 wait_for_tap_update_run() {
   local since_epoch="$1"
+  local expected_tag="$2"
   local run_id=""
 
   for _ in {1..24}; do
-    run_id="$(find_recent_update_tap_run "$since_epoch")"
+    run_id="$(find_recent_update_tap_run "$since_epoch" "$expected_tag")"
     if [[ -n "$run_id" ]]; then
       echo "$run_id"
       return
@@ -309,12 +311,12 @@ info "Publishing release $RELEASE_TAG"
 gh release edit "$RELEASE_TAG" --draft=false
 
 info "Waiting for 'Update Homebrew Tap' workflow"
-run_id="$(wait_for_tap_update_run "$tap_watch_start_epoch")"
+run_id="$(wait_for_tap_update_run "$tap_watch_start_epoch" "$RELEASE_TAG")"
 if [[ -z "$run_id" ]]; then
   warn "Did not detect release-triggered tap update workflow. Dispatching workflow manually."
   gh workflow run "Update Homebrew Tap" --ref main -f release_tag="$RELEASE_TAG"
   sleep 3
-  run_id="$(wait_for_tap_update_run "$(date +%s)")"
+  run_id="$(wait_for_tap_update_run "$(date +%s)" "$RELEASE_TAG")"
 fi
 
 [[ -n "$run_id" ]] || fail "Could not locate 'Update Homebrew Tap' workflow run."
