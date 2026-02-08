@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+  LINK_TARGET="$(readlink "$SCRIPT_PATH")"
+  if [[ "$LINK_TARGET" == /* ]]; then
+    SCRIPT_PATH="$LINK_TARGET"
+  else
+    SCRIPT_PATH="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)/$LINK_TARGET"
+  fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   RED='\033[0;31m'
@@ -344,6 +353,11 @@ if ! has_arg "--api-version" "${passthrough[@]-}"; then
 fi
 
 SERVER_BIN="$(resolve_server_bin)"
+if [[ -z "$SERVER_BIN" && -n "$SOURCE_ROOT" && "${AFM_API_AUTO_BUILD:-1}" != "0" ]]; then
+  info "No prebuilt afm-api-server found; building local server..."
+  build_server 0
+  SERVER_BIN="$(resolve_server_bin)"
+fi
 if [[ -z "$SERVER_BIN" ]]; then
   fail "afm-api-server binary not found. Run 'afm-api build' (source checkout) or reinstall via Homebrew."
 fi
