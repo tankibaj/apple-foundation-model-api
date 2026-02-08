@@ -4,304 +4,97 @@
 
 **Your Mac's intelligence. Your tools. Your data stays home.**
 
-Use Apple's built-in intelligence without sharing anything to the cloud. Free, private and works with the tools you already know.
+Use Apple's built-in intelligence without sending prompts to cloud LLM providers. `afm-api` exposes local Apple Foundation Models with OpenAI-compatible endpoints.
 
 ---
 
-## Quick start
+## Quick Start
 
-**Install**
+Install:
+
 ```bash
 brew tap tankibaj/tap
 brew install afm-api
 ```
 
-**Start**
+Start server:
+
 ```bash
 afm-api
 ```
 
-**Test**
+First completion:
+
 ```bash
 curl -s http://127.0.0.1:8000/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{"model":"apple-foundation-model","messages":[{"role":"user","content":"Hello!"}]}' | jq
 ```
 
-✨ **Done.** Your private OpenAI API is live at `http://127.0.0.1:8000`
+Function-calling smoke test:
+
+```bash
+./tests/function_call.sh
+```
+
+Your local API is now live at `http://127.0.0.1:8000`.
 
 ---
 
-## Why this matters
+## Requirements
 
-| **Completely Private** | **Totally Free** | **Easy to Use**         | **Fast & Efficient** |
-|---|---|-------------------------|---|
-| Everything runs on your Mac | No usage limits | Works like OpenAI API   | Optimized for Mac chips |
-| Nothing sent to the internet | No monthly fees | Use with any smart tool | Runs super fast |
-
----
-
-## What you need
-
-- Mac with Apple Intelligence enabled (MacOS Tahoe 26.0 or newer)
+- macOS 26.0+ with Apple Intelligence enabled
 - Apple Silicon (M1 or newer)
 - Xcode command-line tools
 
-💡 Check: System Settings → Apple Intelligence & Siri
+Check Apple Intelligence in System Settings:
+`Apple Intelligence & Siri`
 
 ---
 
-## Everyday commands
+## Everyday Commands
 
 ```bash
 afm-api                   # Start server
 afm-api --background      # Run in background
 afm-api --status          # Check status
-afm-api --logs            # View logs
+afm-api --logs            # Show logs
 afm-api --stop            # Stop server
-afm-api --version         # Show build/version
-afm-api build             # Build afm-api-server once (source checkout)
-afm-api --rebuild         # Force clean rebuild (source checkout)
+afm-api --version         # Show installed version
 ```
 
 ---
 
-## Examples
+## Core Endpoints
 
-**List models**
-```bash
-curl http://127.0.0.1:8000/v1/models | jq
-```
-
-**Chat with context**
-```bash
-curl -s http://127.0.0.1:8000/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{
-    "model": "apple-foundation-model",
-    "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Explain quantum computing in one sentence."}
-    ]
-  }' | jq
-```
-
-**Function calling**
-```bash
-curl -s http://127.0.0.1:8000/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{
-    "model": "apple-foundation-model",
-    "messages": [{"role": "user", "content": "What is the weather in Tokyo?"}],
-    "tools": [{
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get current weather",
-        "parameters": {
-          "type": "object",
-          "properties": {"city": {"type": "string"}},
-          "required": ["city"]
-        }
-      }
-    }]
-  }' | jq
-```
+- `GET /v1/health`
+- `GET /v1/models`
+- `POST /v1/chat/completions`
 
 ---
 
-## Use with your favorite tools
+## Update
 
-**Python**
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8000/v1",
-    api_key="not-needed"
-)
-
-response = client.chat.completions.create(
-    model="apple-foundation-model",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-```
-
-**Node.js**
-```javascript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  baseURL: 'http://127.0.0.1:8000/v1',
-  apiKey: 'not-needed'
-});
-
-const response = await client.chat.completions.create({
-  model: 'apple-foundation-model',
-  messages: [{ role: 'user', content: 'Hello!' }]
-});
-```
-
-**LangChain**
-```python
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(
-    base_url="http://127.0.0.1:8000/v1",
-    api_key="not-needed",
-    model="apple-foundation-model"
-)
-```
-
----
-
-## Available features
-
-| What you can do | How to access it |
-|----------|---------|
-| Check if server is running | `GET /healthz` |
-| See available models | `GET /v1/models` |
-| Chat with intelligence | `POST /v1/chat/completions` |
-| Test connection | `GET /v1/health` |
-
-Works just like ChatGPT's interface.
-
----
-
-## Troubleshooting
-
-**Server won't start?**
-```bash
-# Check Apple Intelligence
-# System Settings → Apple Intelligence & Siri
-
-# Install Xcode tools
-xcode-select --install
-```
-
-**Connection issues?**
-```bash
-afm-api --status          # Check if running
-afm-api --logs            # View logs
-afm-api --port 8080       # Try different port
-```
-
-**Need help?** [Open an issue](https://github.com/tankibaj/apple-foundation-model-api/issues)
-
----
-
-## What you can build
-
-- Private chat applications
-- Offline smart assistants
-- Zero-cost automation
-- Local development tools
-- Custom agents & workflows
-
-All with libraries you already use.
-
----
-
-## Advanced usage
-
-**Custom configuration**
-```bash
-afm-api --host 127.0.0.1 --port 8080 --api-version latest
-```
-
-**Development mode**
-```bash
-cd /path/to/repo
-./afm-api build
-./afm-api --background
-./afm-api --logs --follow
-```
-
-**Runtime safety knobs**
-```bash
-# Release-user mode: never build Swift locally if server binary is missing
-AFM_API_REQUIRE_PREBUILT=1 afm-api --background
-
-# Tune background startup/shutdown wait windows
-AFM_API_STARTUP_TIMEOUT_SEC=30 AFM_API_SHUTDOWN_TIMEOUT_SEC=15 afm-api --background
-```
-
-**SwiftPM layout (maintainers)**
-```text
-Package.swift
-Sources/AFMAPI/openai_api
-Sources/AFMAPI/capabilities
-Sources/AFMAPI/models
-Sources/AFMAPI/support
-Sources/AFMAPI/server
-```
-
-**Build manually**
-```bash
-swift build -c release --product afm-api-server
-```
-
-**Run tests**
-```bash
-./tests/function_call.sh
-```
-**Function Calling Examples (real APIs)**
-```bash
-# Country info
-./tests/tool_country_info_restcountries.sh http://127.0.0.1:8000
-
-# Currency conversion
-./tests/tool_currency_frankfurter.sh http://127.0.0.1:8000
-
-# Public holidays
-./tests/tool_public_holidays_nager.sh http://127.0.0.1:8000
-
-# Time zone
-./tests/tool_timezone_worldtimeapi.sh http://127.0.0.1:8000
-
-# Weather
-./tests/tool_weather_openmeteo.sh http://127.0.0.1:8000
-```
-
-**Update**
 ```bash
 brew update
 brew upgrade afm-api
 ```
 
-**Automated Homebrew updates (maintainers)**
-```bash
-# Required once in apple-foundation-model-api repo settings:
-# secret: HOMEBREW_TAP_TOKEN (PAT with write access to tankibaj/homebrew-tap)
-#
-# Then every GitHub Release (vX.Y.Z) auto-updates:
-# - Formula/afm-api.rb
-# - Formula/afm-api@X.Y.rb
-```
-
 ---
-## What's coming soon
 
-- Live-streaming responses (currently you get the full response at once)
-- Support for more Apple Intelligence models
-- Works only on newer Macs with Apple Intelligence right now
+## Documentation
+
+- [Development Guide](./docs/development.md)
+- [Testing Guide](./docs/testing.md)
+- [Homebrew Guide](./docs/homebrew.md)
+- [Local Homebrew Feature-Branch Testing](./docs/homebrew-local-testing.md)
+- [Stable Release Process (Prebuilt Binary)](./docs/release.md)
+- [Architecture](./docs/architecture.md)
 
 ---
 
-## Learn more
+## References
 
-- [Apple Intelligence](https://developer.apple.com/documentation/foundationmodels)
+- [Apple Foundation Models](https://developer.apple.com/documentation/foundationmodels)
 - [Apple Intelligence Privacy](https://www.apple.com/legal/privacy/data/en/intelligence-engine/)
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat)
-
----
-
-## Contributing
-
-We welcome contributions! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
----
-Built with ❤️ for the Apple Silicon community
