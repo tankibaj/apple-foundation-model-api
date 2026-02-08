@@ -1,8 +1,6 @@
 name: Build Release Binary
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -16,7 +14,6 @@ permissions:
 
 jobs:
   build-and-publish:
-    if: github.event_name != 'release' || github.event.release.prerelease == false
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -27,11 +24,7 @@ jobs:
       - name: Resolve release tag
         id: vars
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAG="${GITHUB_REF_NAME}"
-          else
-            TAG="${{ inputs.release_tag }}"
-          fi
+          TAG="${{ inputs.release_tag }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Checkout release tag
@@ -55,11 +48,3 @@ jobs:
             "${{ steps.package.outputs.asset_path }}" \
             "${{ steps.package.outputs.sha_path }}" \
             --clobber
-
-      - name: Trigger Homebrew tap update
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run "Update Homebrew Tap" \
-            --ref main \
-            -f release_tag="${{ steps.vars.outputs.tag }}"
