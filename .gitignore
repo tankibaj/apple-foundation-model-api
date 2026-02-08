@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Local environments/build
+.venv/
+.build/
+
+# Runtime/log artifacts
+*.log

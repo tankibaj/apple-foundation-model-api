@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export SWIFT_MODULECACHE_PATH="${SWIFT_MODULECACHE_PATH:-/tmp/afm-api-swift-module-cache}"
+mkdir -p "$SWIFT_MODULECACHE_PATH"
+exec swift -module-cache-path "$SWIFT_MODULECACHE_PATH" "$SCRIPT_DIR/../src/afm.swift" "$@"
