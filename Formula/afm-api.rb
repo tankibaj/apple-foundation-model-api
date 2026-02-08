@@ -1,8 +1,8 @@
 class AfmApi < Formula
   desc "OpenAI-compatible local server for Apple Foundation Model"
   homepage "https://github.com/tankibaj/apple-foundation-model-api"
-  url "https://github.com/tankibaj/apple-foundation-model-api/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "74db3aaa8df38559eae9d1bf00921a6a5f2958b95e989bf14910e4880e316f11"
+  url "https://github.com/tankibaj/apple-foundation-model-api/archive/refs/tags/v1.0.1.tar.gz"
+  sha256 "5b92accb3fb1153e31a80f959ecdcd9450e39e51836fae03653872e982c18a96"
   license "MIT"
 
   depends_on :macos
