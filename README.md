@@ -59,6 +59,9 @@ afm-api --background      # Run in background
 afm-api --status          # Check status
 afm-api --logs            # View logs
 afm-api --stop            # Stop server
+afm-api --version         # Show build/version
+afm-api build             # Build afm-api-server once (source checkout)
+afm-api --rebuild         # Force clean rebuild (source checkout)
 ```
 
 ---
@@ -209,30 +212,46 @@ afm-api --host 127.0.0.1 --port 8080 --model-name custom-model
 **Development mode**
 ```bash
 cd /path/to/repo
+./afm-api build
 ./afm-api --background
 ./afm-api --logs --follow
 ```
 
+**SwiftPM layout (maintainers)**
+```text
+Package.swift
+Sources/AFMAPI/openai_api
+Sources/AFMAPI/capabilities
+Sources/AFMAPI/models
+Sources/AFMAPI/support
+Sources/AFMAPI/server
+```
+
+**Build manually**
+```bash
+swift build -c release --product afm-api-server
+```
+
 **Run tests**
 ```bash
-./tests/test_function_call.sh
+./tests/function_call.sh
 ```
 **Function Calling Examples (real APIs)**
 ```bash
 # Country info
-./tests/test_tool_country_info_restcountries.sh http://127.0.0.1:8000
+./tests/tool_country_info_restcountries.sh http://127.0.0.1:8000
 
 # Currency conversion
-./tests/test_tool_currency_frankfurter.sh http://127.0.0.1:8000
+./tests/tool_currency_frankfurter.sh http://127.0.0.1:8000
 
 # Public holidays
-./tests/test_tool_public_holidays_nager.sh http://127.0.0.1:8000
+./tests/tool_public_holidays_nager.sh http://127.0.0.1:8000
 
 # Time zone
-./tests/test_tool_timezone_worldtimeapi.sh http://127.0.0.1:8000
+./tests/tool_timezone_worldtimeapi.sh http://127.0.0.1:8000
 
 # Weather
-./tests/test_tool_weather_openmeteo.sh http://127.0.0.1:8000
+./tests/tool_weather_openmeteo.sh http://127.0.0.1:8000
 ```
 
 **Update**

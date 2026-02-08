@@ -1,0 +1,46 @@
+name: Update Homebrew Tap RC
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "RC/pre-release tag (e.g. v1.2.0-rc.1)"
+        required: true
+        type: string
+
+jobs:
+  update-rc:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: tankibaj/homebrew-tap-prerelease
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap-prerelease
+
+      - name: Update RC formula
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TAP_REPO_PATH: homebrew-tap-prerelease
+          REPO_SLUG: tankibaj/apple-foundation-model-api
+          FORMULA_NAME: afm-api-rc
+          RELEASE_ASSET_NAME: afm-api-macos-arm64.tar.gz
+          UPDATE_VERSIONED_FORMULA: "0"
+          TEMPLATE_FORMULA_PATH: Formula/afm-api-rc.rb
+          SYNC_TEMPLATE_ALWAYS: "1"
+        run: |
+          ./.github/scripts/update_homebrew_tap.sh
+
+      - name: Commit and push RC formula updates
+        working-directory: homebrew-tap-prerelease
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/afm-api-rc.rb
+          git diff --cached --quiet && echo "No RC formula changes" && exit 0
+          git commit -m "feat: afm-api-rc ${{ inputs.release_tag }}"
+          git push origin HEAD

@@ -2,18 +2,203 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export SWIFT_MODULECACHE_PATH="${SWIFT_MODULECACHE_PATH:-/tmp/afm-api-swift-module-cache}"
-mkdir -p "$SWIFT_MODULECACHE_PATH"
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[1;33m'
+  BLUE='\033[0;34m'
+  NC='\033[0m'
+else
+  RED=''
+  GREEN=''
+  YELLOW=''
+  BLUE=''
+  NC=''
+fi
+
+info() { echo -e "${BLUE}ℹ️  $*${NC}"; }
+ok() { echo -e "${GREEN}✅ $*${NC}"; }
+warn() { echo -e "${YELLOW}⚠️  $*${NC}"; }
+fail() { echo -e "${RED}❌ $*${NC}" >&2; exit 1; }
+
+version_ge() {
+  local current="$1"
+  local required="$2"
+  [[ "$(printf '%s\n%s\n' "$required" "$current" | sort -V | tail -n1)" == "$current" ]]
+}
+
+check_macos_version() {
+  [[ "$(uname -s)" == "Darwin" ]] || fail "afm-api only runs on macOS."
+
+  local required="26.0"
+  local detected
+  detected="$(sw_vers -productVersion 2>/dev/null || true)"
+  [[ -n "$detected" ]] || fail "Unable to read macOS version via sw_vers."
+
+  info "Detected macOS $detected"
+  if version_ge "$detected" "$required"; then
+    ok "macOS version check passed (required >= $required)."
+  else
+    fail "macOS $detected is not supported. Required >= $required."
+  fi
+}
+
+check_swift_toolchain() {
+  command -v swift >/dev/null 2>&1 || fail "Swift compiler not found. Install Xcode Command Line Tools."
+
+  local output swift_version
+  output="$(swift --version 2>&1 || true)"
+  swift_version="$(printf '%s\n' "$output" | sed -nE 's/.*Apple Swift version ([0-9]+\.[0-9]+).*/\1/p' | head -n1)"
+
+  if [[ -z "$swift_version" ]]; then
+    warn "Could not parse Swift version from 'swift --version'. Continuing."
+    return
+  fi
+
+  info "Detected Swift $swift_version"
+  if version_ge "$swift_version" "6.0"; then
+    ok "Swift toolchain check passed."
+  else
+    warn "Swift $swift_version may be older than recommended (6.0+). Continuing."
+  fi
+}
+
+check_xcode_clt() {
+  command -v xcode-select >/dev/null 2>&1 || fail "xcode-select not found. Install Xcode Command Line Tools: xcode-select --install"
+
+  local dev_dir
+  dev_dir="$(xcode-select -p 2>/dev/null || true)"
+  if [[ -n "$dev_dir" ]]; then
+    ok "Xcode Command Line Tools detected at $dev_dir."
+  else
+    fail "Xcode Command Line Tools not configured. Run: xcode-select --install"
+  fi
+}
+
+validate_build_prereqs() {
+  check_macos_version
+  check_swift_toolchain
+  check_xcode_clt
+}
 
 RUNTIME_DIR="${AFM_API_RUNTIME_DIR:-/tmp/afm-api}"
 PID_FILE="$RUNTIME_DIR/afm-api.pid"
 LOG_FILE="$RUNTIME_DIR/afm-api.log"
+LOG_MAX_BYTES="${AFM_API_LOG_MAX_BYTES:-10485760}" # 10MB
+LOG_MAX_FILES="${AFM_API_LOG_MAX_FILES:-3}"
 mkdir -p "$RUNTIME_DIR"
+
 export AFM_API_LOG_FILE="$LOG_FILE"
+export AFM_API_LOG_MAX_BYTES="$LOG_MAX_BYTES"
+export AFM_API_LOG_MAX_FILES="$LOG_MAX_FILES"
 
 DEFAULT_HOST="${AFM_API_HOST:-127.0.0.1}"
 DEFAULT_PORT="${AFM_API_PORT:-8000}"
 DEFAULT_API_VERSION="${AFM_API_VERSION:-latest}"
+DEFAULT_SOURCE_ROOT="${AFM_API_SOURCE_ROOT:-}"
+EMBEDDED_VERSION="__AFM_API_VERSION__"
+
+resolve_source_root() {
+  if [[ -n "$DEFAULT_SOURCE_ROOT" && -f "$DEFAULT_SOURCE_ROOT/Package.swift" ]]; then
+    echo "$DEFAULT_SOURCE_ROOT"
+    return
+  fi
+
+  if [[ -f "$SCRIPT_DIR/../Package.swift" ]]; then
+    echo "$SCRIPT_DIR/.."
+    return
+  fi
+
+  if [[ -f "$SCRIPT_DIR/../share/afm-api/Package.swift" ]]; then
+    echo "$SCRIPT_DIR/../share/afm-api"
+    return
+  fi
+
+  echo ""
+}
+
+SOURCE_ROOT="$(resolve_source_root)"
+if [[ -n "$SOURCE_ROOT" ]]; then
+  BUILD_DIR="${AFM_API_BUILD_DIR:-$SOURCE_ROOT/.build}"
+else
+  BUILD_DIR="${AFM_API_BUILD_DIR:-$RUNTIME_DIR/build}"
+fi
+
+resolve_version() {
+  # When packaged, EMBEDDED_VERSION is replaced with a concrete version string.
+  # Keep this check resilient to in-place replacement by avoiding exact placeholder literals.
+  if [[ -n "$EMBEDDED_VERSION" && "$EMBEDDED_VERSION" != *"AFM_API_VERSION"* ]]; then
+    echo "$EMBEDDED_VERSION"
+    return
+  fi
+
+  if [[ -n "$SOURCE_ROOT" && -d "$SOURCE_ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
+    local git_version
+    git_version="$(git -C "$SOURCE_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
+    if [[ -n "$git_version" ]]; then
+      echo "$git_version"
+      return
+    fi
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    local brew_version
+    brew_version="$(brew list --versions afm-api 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    if [[ -z "$brew_version" ]]; then
+      brew_version="$(brew list --versions afm-api-rc 2>/dev/null | awk '{print $2}' | head -n1 || true)"
+    fi
+    if [[ -n "$brew_version" ]]; then
+      echo "$brew_version"
+      return
+    fi
+  fi
+
+  echo "unknown"
+}
+
+resolve_server_bin() {
+  if [[ -n "${AFM_API_SERVER_BIN:-}" && -x "${AFM_API_SERVER_BIN}" ]]; then
+    echo "${AFM_API_SERVER_BIN}"
+    return
+  fi
+
+  if [[ -x "$SCRIPT_DIR/afm-api-server" ]]; then
+    echo "$SCRIPT_DIR/afm-api-server"
+    return
+  fi
+
+  if [[ -n "$SOURCE_ROOT" && -x "$SOURCE_ROOT/.build/release/afm-api-server" ]]; then
+    echo "$SOURCE_ROOT/.build/release/afm-api-server"
+    return
+  fi
+
+  if [[ -x "$BUILD_DIR/release/afm-api-server" ]]; then
+    echo "$BUILD_DIR/release/afm-api-server"
+    return
+  fi
+
+  echo ""
+}
+
+build_server() {
+  local clean="${1:-0}"
+  [[ -n "$SOURCE_ROOT" ]] || fail "Source checkout not found. 'afm-api build' requires Package.swift."
+
+  validate_build_prereqs
+
+  if [[ "$clean" == "1" ]]; then
+    rm -rf "$BUILD_DIR"
+  fi
+
+  info "Building afm-api-server (release)..."
+  swift build \
+    --package-path "$SOURCE_ROOT" \
+    --scratch-path "$BUILD_DIR" \
+    -c release \
+    --product afm-api-server
+  ok "Build complete."
+}
 
 is_running() {
   if [[ ! -f "$PID_FILE" ]]; then
@@ -42,11 +227,21 @@ has_arg() {
   return 1
 }
 
+subcommand="${1:-}"
+explicit_build=false
+if [[ "$subcommand" == "build" ]]; then
+  explicit_build=true
+  shift
+fi
+
 background=false
 stop=false
 status=false
 logs=false
 follow=false
+rebuild=false
+show_version=false
+clean_build=false
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
@@ -66,12 +261,26 @@ while [[ $# -gt 0 ]]; do
     --follow|-f)
       follow=true
       ;;
+    --rebuild)
+      rebuild=true
+      ;;
+    --version|-v)
+      show_version=true
+      ;;
+    --clean)
+      clean_build=true
+      ;;
     *)
       passthrough+=("$1")
       ;;
   esac
   shift
 done
+
+if [[ "$show_version" == true ]]; then
+  echo "afm-api $(resolve_version)"
+  exit 0
+fi
 
 if [[ "$stop" == true ]]; then
   if is_running; then
@@ -115,6 +324,15 @@ if [[ "$logs" == true ]]; then
   exit 0
 fi
 
+if [[ "$explicit_build" == true ]]; then
+  build_server "$([[ "$clean_build" == true ]] && echo 1 || echo 0)"
+  exit 0
+fi
+
+if [[ "$rebuild" == true ]]; then
+  build_server 1
+fi
+
 if ! has_arg "--host" "${passthrough[@]-}"; then
   passthrough+=("--host" "$DEFAULT_HOST")
 fi
@@ -125,7 +343,12 @@ if ! has_arg "--api-version" "${passthrough[@]-}"; then
   passthrough+=("--api-version" "$DEFAULT_API_VERSION")
 fi
 
-cmd=(swift -module-cache-path "$SWIFT_MODULECACHE_PATH" "$SCRIPT_DIR/../src/afm-api.swift")
+SERVER_BIN="$(resolve_server_bin)"
+if [[ -z "$SERVER_BIN" ]]; then
+  fail "afm-api-server binary not found. Run 'afm-api build' (source checkout) or reinstall via Homebrew."
+fi
+
+cmd=("$SERVER_BIN")
 
 if [[ "$background" == true ]]; then
   if is_running; then

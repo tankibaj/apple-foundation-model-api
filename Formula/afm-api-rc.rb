@@ -1,5 +1,5 @@
-class AfmApi < Formula
-  desc "OpenAI-compatible local server for Apple Foundation Model"
+class AfmApiRc < Formula
+  desc "OpenAI-compatible local server for Apple Foundation Model (release candidate)"
   homepage "https://github.com/tankibaj/apple-foundation-model-api"
   url "https://github.com/tankibaj/apple-foundation-model-api/archive/refs/tags/v1.1.1.tar.gz"
   sha256 "e8b84865dc93f1aeaf0a86a9d3149254a3be3640199c6a1e1fe36bd55c7fcfa6"
@@ -9,11 +9,9 @@ class AfmApi < Formula
 
   def install
     if File.exist?("afm-api") && File.exist?("afm-api-server")
-      # Binary release asset path (no local build required).
       bin.install "afm-api"
       bin.install "afm-api-server"
     else
-      # Source release fallback.
       bin.install "bin/afm-api"
       pkgshare.install "Package.swift"
       pkgshare.install "Sources"
