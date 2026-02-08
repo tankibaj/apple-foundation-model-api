@@ -65,6 +65,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run "Update Homebrew Tap RC" \
-            --ref main \
+          gh workflow run update-homebrew-tap-rc.yml \
+            --ref "${GITHUB_REF_NAME}" \
             -f release_tag="${{ steps.vars.outputs.tag }}"
