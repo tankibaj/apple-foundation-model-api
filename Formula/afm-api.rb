@@ -8,15 +8,26 @@ class AfmApi < Formula
   depends_on :macos
 
   def install
-    bin.install "bin/afm-api"
-    pkgshare.install "Package.swift"
-    pkgshare.install "Sources"
-    inreplace bin/"afm-api", "__AFM_API_VERSION__", version.to_s
+    if File.exist?("afm-api") && File.exist?("afm-api-server")
+      # Binary release asset path (no local build required).
+      bin.install "afm-api"
+      bin.install "afm-api-server"
+    else
+      # Source release fallback.
+      bin.install "bin/afm-api"
+      pkgshare.install "Package.swift"
+      pkgshare.install "Sources"
+      inreplace bin/"afm-api", "__AFM_API_VERSION__", version.to_s
+    end
   end
 
   test do
     assert_predicate bin/"afm-api", :exist?
-    assert_predicate pkgshare/"Package.swift", :exist?
-    assert_predicate pkgshare/"Sources/AFMAPI/main.swift", :exist?
+    if (bin/"afm-api-server").exist?
+      assert_predicate bin/"afm-api-server", :exist?
+    else
+      assert_predicate pkgshare/"Package.swift", :exist?
+      assert_predicate pkgshare/"Sources/AFMAPI/main.swift", :exist?
+    end
   end
 end

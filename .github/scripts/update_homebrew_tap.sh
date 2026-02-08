@@ -3,7 +3,9 @@ set -euo pipefail
 
 RELEASE_TAG="${RELEASE_TAG:-${1:-}}"
 TAP_REPO_PATH="${TAP_REPO_PATH:-${2:-}}"
-SOURCE_TARBALL="${SOURCE_TARBALL:-}"
+RELEASE_ASSET_FILE="${RELEASE_ASSET_FILE:-}"
+RELEASE_ASSET_NAME="${RELEASE_ASSET_NAME:-afm-api-macos-arm64.tar.gz}"
+RELEASE_ASSET_URL="${RELEASE_ASSET_URL:-}"
 REPO_SLUG="${REPO_SLUG:-tankibaj/apple-foundation-model-api}"
 FORMULA_NAME="${FORMULA_NAME:-afm-api}"
 
@@ -24,7 +26,7 @@ fi
 
 VERSION="${RELEASE_TAG#v}"
 MAJOR_MINOR="$(echo "${VERSION}" | cut -d. -f1,2)"
-URL="https://github.com/${REPO_SLUG}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
+URL="${RELEASE_ASSET_URL:-https://github.com/${REPO_SLUG}/releases/download/${RELEASE_TAG}/${RELEASE_ASSET_NAME}}"
 BASE_FORMULA_PATH="${TAP_REPO_PATH}/Formula/${FORMULA_NAME}.rb"
 VERSIONED_FORMULA_PATH="${TAP_REPO_PATH}/Formula/${FORMULA_NAME}@${MAJOR_MINOR}.rb"
 
@@ -33,19 +35,19 @@ if [[ ! -f "${BASE_FORMULA_PATH}" ]]; then
   exit 1
 fi
 
-TMP_TARBALL=""
-if [[ -n "${SOURCE_TARBALL}" ]]; then
-  if [[ ! -f "${SOURCE_TARBALL}" ]]; then
-    echo "ERROR: SOURCE_TARBALL not found: ${SOURCE_TARBALL}"
+TMP_ASSET=""
+if [[ -n "${RELEASE_ASSET_FILE}" ]]; then
+  if [[ ! -f "${RELEASE_ASSET_FILE}" ]]; then
+    echo "ERROR: RELEASE_ASSET_FILE not found: ${RELEASE_ASSET_FILE}"
     exit 1
   fi
-  TMP_TARBALL="${SOURCE_TARBALL}"
+  TMP_ASSET="${RELEASE_ASSET_FILE}"
 else
-  TMP_TARBALL="$(mktemp -t afm-api-release-XXXXXX.tar.gz)"
-  curl -fsSL "${URL}" -o "${TMP_TARBALL}"
+  TMP_ASSET="$(mktemp -t afm-api-release-XXXXXX.tar.gz)"
+  curl -fsSL "${URL}" -o "${TMP_ASSET}"
 fi
 
-SHA256="$(shasum -a 256 "${TMP_TARBALL}" | awk '{print $1}')"
+SHA256="$(shasum -a 256 "${TMP_ASSET}" | awk '{print $1}')"
 
 FORMULA_CLASS_BASE="AfmApi"
 FORMULA_CLASS_VERSIONED="AfmApiAT${MAJOR_MINOR//./}"
@@ -54,12 +56,17 @@ update_formula_file() {
   local file_path="$1"
   local class_name="$2"
 
-  ruby - "${file_path}" "${class_name}" "${URL}" "${SHA256}" <<'RUBY'
-path, class_name, url, sha = ARGV
+  ruby - "${file_path}" "${class_name}" "${URL}" "${SHA256}" "${VERSION}" <<'RUBY'
+path, class_name, url, sha, version = ARGV
 content = File.read(path)
 content.sub!(/^class\s+\S+\s+<\s+Formula$/, "class #{class_name} < Formula")
 content.sub!(/^\s*url\s+".*"$/, "  url \"#{url}\"")
 content.sub!(/^\s*sha256\s+".*"$/, "  sha256 \"#{sha}\"")
+if content.match?(/^\s*version\s+"/)
+  content.sub!(/^\s*version\s+".*"$/, "  version \"#{version}\"")
+else
+  content.sub!(/^\s*url\s+".*"$/, "  url \"#{url}\"\n  version \"#{version}\"")
+end
 File.write(path, content)
 RUBY
 }
