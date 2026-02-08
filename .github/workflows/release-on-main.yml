@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -105,6 +106,15 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$tag" \
             --generate-notes
+
+      - name: Trigger Homebrew tap update
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run "Update Homebrew Tap" \
+            --ref main \
+            -f release_tag="${{ steps.version.outputs.next_tag }}"
 
       - name: Summary
         run: |
