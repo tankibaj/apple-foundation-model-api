@@ -7,7 +7,7 @@ This guide explains how to test `afm-api` from your current local branch without
 From the repo root:
 
 ```bash
-./tests/test_homebrew_feature_branch_install.sh
+./tests/homebrew_feature_branch_install.sh
 ```
 
 Default tap used by the test script:
@@ -32,19 +32,19 @@ Default tap used by the test script:
 Keep installed formula:
 
 ```bash
-KEEP_INSTALL=1 ./tests/test_homebrew_feature_branch_install.sh
+KEEP_INSTALL=1 ./tests/homebrew_feature_branch_install.sh
 ```
 
 Keep local tap:
 
 ```bash
-KEEP_TAP=1 ./tests/test_homebrew_feature_branch_install.sh
+KEEP_TAP=1 ./tests/homebrew_feature_branch_install.sh
 ```
 
 Use a custom local tap:
 
 ```bash
-./tests/test_homebrew_feature_branch_install.sh myuser/localtap
+./tests/homebrew_feature_branch_install.sh myuser/localtap
 ```
 
 ## Manual Cleanup

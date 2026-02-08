@@ -232,24 +232,24 @@ swift build -c release --product afm-api-server
 
 **Run tests**
 ```bash
-./tests/test_function_call.sh
+./tests/function_call.sh
 ```
 **Function Calling Examples (real APIs)**
 ```bash
 # Country info
-./tests/test_tool_country_info_restcountries.sh http://127.0.0.1:8000
+./tests/tool_country_info_restcountries.sh http://127.0.0.1:8000
 
 # Currency conversion
-./tests/test_tool_currency_frankfurter.sh http://127.0.0.1:8000
+./tests/tool_currency_frankfurter.sh http://127.0.0.1:8000
 
 # Public holidays
-./tests/test_tool_public_holidays_nager.sh http://127.0.0.1:8000
+./tests/tool_public_holidays_nager.sh http://127.0.0.1:8000
 
 # Time zone
-./tests/test_tool_timezone_worldtimeapi.sh http://127.0.0.1:8000
+./tests/tool_timezone_worldtimeapi.sh http://127.0.0.1:8000
 
 # Weather
-./tests/test_tool_weather_openmeteo.sh http://127.0.0.1:8000
+./tests/tool_weather_openmeteo.sh http://127.0.0.1:8000
 ```
 
 **Update**
