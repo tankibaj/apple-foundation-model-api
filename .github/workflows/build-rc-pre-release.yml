@@ -1,0 +1,70 @@
+name: Build RC Pre-release
+
+on:
+  push:
+    branches:
+      - "feature/**"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional RC tag override (e.g. v1.2.0-rc.feature-x)"
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  build-and-publish-rc:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve RC tag
+        id: vars
+        shell: bash
+        run: |
+          if [[ -n "${{ inputs.release_tag }}" ]]; then
+            TAG="${{ inputs.release_tag }}"
+          else
+            BRANCH_SLUG="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+            TAG="v0.0.0-rc.${BRANCH_SLUG}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build release asset
+        id: package
+        env:
+          RELEASE_TAG: ${{ steps.vars.outputs.tag }}
+          ASSET_NAME: afm-api-macos-arm64.tar.gz
+        run: |
+          ./.github/scripts/package_release_binary.sh
+
+      - name: Publish RC pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          gh release delete "$TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes "Automated pre-release for branch ${GITHUB_REF_NAME}." \
+            --prerelease
+
+          gh release upload "$TAG" \
+            "${{ steps.package.outputs.asset_path }}" \
+            "${{ steps.package.outputs.sha_path }}" \
+            --clobber
+
+      - name: Trigger Homebrew RC tap update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run "Update Homebrew Tap RC" \
+            --ref main \
+            -f release_tag="${{ steps.vars.outputs.tag }}"

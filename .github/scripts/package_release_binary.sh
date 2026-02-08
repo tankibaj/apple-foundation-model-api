@@ -10,8 +10,8 @@ if [[ -z "$RELEASE_TAG" ]]; then
   echo "ERROR: RELEASE_TAG is required (e.g. v1.2.3)"
   exit 1
 fi
-if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "ERROR: RELEASE_TAG must match v<major>.<minor>.<patch>"
+if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]]; then
+  echo "ERROR: RELEASE_TAG must match v<major>.<minor>.<patch>[-suffix]"
   exit 1
 fi
 
