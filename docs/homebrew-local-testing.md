@@ -20,9 +20,9 @@ Default tap used by the test script:
 2. Creates/uses the local tap (`tankibaj/localtap` by default).
 3. Writes a temporary formula for `afm-api`.
 4. Runs:
-   - `brew reinstall --build-from-source tankibaj/localtap/afm-api`
+   - `brew reinstall tankibaj/localtap/afm-api`
 5. Runs a smoke test:
-   - `afm-api --rebuild --background`
+   - `afm-api --background`
    - `curl http://127.0.0.1:8000/v1/health`
    - `afm-api --stop`
 6. Cleans up temporary artifacts by default.

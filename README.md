@@ -60,7 +60,8 @@ afm-api --status          # Check status
 afm-api --logs            # View logs
 afm-api --stop            # Stop server
 afm-api --version         # Show build/version
-afm-api --rebuild         # Rebuild server binary from source
+afm-api build             # Build afm-api-server once (source checkout)
+afm-api --rebuild         # Force clean rebuild (source checkout)
 ```
 
 ---
@@ -211,6 +212,7 @@ afm-api --host 127.0.0.1 --port 8080 --model-name custom-model
 **Development mode**
 ```bash
 cd /path/to/repo
+./afm-api build
 ./afm-api --background
 ./afm-api --logs --follow
 ```

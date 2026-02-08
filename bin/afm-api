@@ -2,8 +2,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export SWIFT_MODULECACHE_PATH="${SWIFT_MODULECACHE_PATH:-/tmp/afm-api-swift-module-cache}"
-mkdir -p "$SWIFT_MODULECACHE_PATH"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   RED='\033[0;31m'
@@ -90,6 +88,7 @@ LOG_FILE="$RUNTIME_DIR/afm-api.log"
 LOG_MAX_BYTES="${AFM_API_LOG_MAX_BYTES:-10485760}" # 10MB
 LOG_MAX_FILES="${AFM_API_LOG_MAX_FILES:-3}"
 mkdir -p "$RUNTIME_DIR"
+
 export AFM_API_LOG_FILE="$LOG_FILE"
 export AFM_API_LOG_MAX_BYTES="$LOG_MAX_BYTES"
 export AFM_API_LOG_MAX_FILES="$LOG_MAX_FILES"
@@ -119,13 +118,20 @@ resolve_source_root() {
   echo ""
 }
 
+SOURCE_ROOT="$(resolve_source_root)"
+if [[ -n "$SOURCE_ROOT" ]]; then
+  BUILD_DIR="${AFM_API_BUILD_DIR:-$SOURCE_ROOT/.build}"
+else
+  BUILD_DIR="${AFM_API_BUILD_DIR:-$RUNTIME_DIR/build}"
+fi
+
 resolve_version() {
   if [[ "$EMBEDDED_VERSION" != "__AFM_API_VERSION__" && -n "$EMBEDDED_VERSION" ]]; then
     echo "$EMBEDDED_VERSION"
     return
   fi
 
-  if [[ -n "${SOURCE_ROOT:-}" && -d "${SOURCE_ROOT}/.git" ]] && command -v git >/dev/null 2>&1; then
+  if [[ -n "$SOURCE_ROOT" && -d "$SOURCE_ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
     local git_version
     git_version="$(git -C "$SOURCE_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
     if [[ -n "$git_version" ]]; then
@@ -146,10 +152,48 @@ resolve_version() {
   echo "unknown"
 }
 
-SOURCE_ROOT="$(resolve_source_root)"
+resolve_server_bin() {
+  if [[ -n "${AFM_API_SERVER_BIN:-}" && -x "${AFM_API_SERVER_BIN}" ]]; then
+    echo "${AFM_API_SERVER_BIN}"
+    return
+  fi
 
-BUILD_DIR="${AFM_API_BUILD_DIR:-$RUNTIME_DIR/build}"
-SERVER_BIN="$BUILD_DIR/release/afm-api-server"
+  if [[ -x "$SCRIPT_DIR/afm-api-server" ]]; then
+    echo "$SCRIPT_DIR/afm-api-server"
+    return
+  fi
+
+  if [[ -n "$SOURCE_ROOT" && -x "$SOURCE_ROOT/.build/release/afm-api-server" ]]; then
+    echo "$SOURCE_ROOT/.build/release/afm-api-server"
+    return
+  fi
+
+  if [[ -x "$BUILD_DIR/release/afm-api-server" ]]; then
+    echo "$BUILD_DIR/release/afm-api-server"
+    return
+  fi
+
+  echo ""
+}
+
+build_server() {
+  local clean="${1:-0}"
+  [[ -n "$SOURCE_ROOT" ]] || fail "Source checkout not found. 'afm-api build' requires Package.swift."
+
+  validate_build_prereqs
+
+  if [[ "$clean" == "1" ]]; then
+    rm -rf "$BUILD_DIR"
+  fi
+
+  info "Building afm-api-server (release)..."
+  swift build \
+    --package-path "$SOURCE_ROOT" \
+    --scratch-path "$BUILD_DIR" \
+    -c release \
+    --product afm-api-server
+  ok "Build complete."
+}
 
 is_running() {
   if [[ ! -f "$PID_FILE" ]]; then
@@ -178,6 +222,13 @@ has_arg() {
   return 1
 }
 
+subcommand="${1:-}"
+explicit_build=false
+if [[ "$subcommand" == "build" ]]; then
+  explicit_build=true
+  shift
+fi
+
 background=false
 stop=false
 status=false
@@ -185,6 +236,7 @@ logs=false
 follow=false
 rebuild=false
 show_version=false
+clean_build=false
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
@@ -209,6 +261,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --version|-v)
       show_version=true
+      ;;
+    --clean)
+      clean_build=true
       ;;
     *)
       passthrough+=("$1")
@@ -264,8 +319,13 @@ if [[ "$logs" == true ]]; then
   exit 0
 fi
 
-if [[ -z "$SOURCE_ROOT" ]]; then
-  fail "Could not locate Package.swift for afm-api. Set AFM_API_SOURCE_ROOT."
+if [[ "$explicit_build" == true ]]; then
+  build_server "$([[ "$clean_build" == true ]] && echo 1 || echo 0)"
+  exit 0
+fi
+
+if [[ "$rebuild" == true ]]; then
+  build_server 1
 fi
 
 if ! has_arg "--host" "${passthrough[@]-}"; then
@@ -278,23 +338,9 @@ if ! has_arg "--api-version" "${passthrough[@]-}"; then
   passthrough+=("--api-version" "$DEFAULT_API_VERSION")
 fi
 
-build_server() {
-  validate_build_prereqs
-  info "Building afm-api-server (release)..."
-  swift build \
-    --package-path "$SOURCE_ROOT" \
-    --scratch-path "$BUILD_DIR" \
-    -c release \
-    --product afm-api-server
-  ok "Build complete."
-}
-
-if [[ "$rebuild" == true ]]; then
-  rm -rf "$BUILD_DIR"
-fi
-
-if [[ ! -x "$SERVER_BIN" ]]; then
-  build_server
+SERVER_BIN="$(resolve_server_bin)"
+if [[ -z "$SERVER_BIN" ]]; then
+  fail "afm-api-server binary not found. Run 'afm-api build' (source checkout) or reinstall via Homebrew."
 fi
 
 cmd=("$SERVER_BIN")

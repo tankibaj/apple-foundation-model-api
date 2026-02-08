@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export HOMEBREW_NO_GITHUB_API=1
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -12,6 +13,7 @@ require brew
 require git
 require shasum
 require curl
+require swift
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -26,6 +28,8 @@ TAP_ROOT="$(brew --repository)/Library/Taps/${TAP_USER}/homebrew-${TAP_REPO}"
 FORMULA_PATH="$TAP_ROOT/Formula/${FORMULA_NAME}.rb"
 
 SHORT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+VERSION="0.0.0-feature.${SHORT_SHA}"
+STAGE_DIR="${TMPDIR:-/tmp}/afm-api-feature-stage-${SHORT_SHA}"
 TARBALL="${TMPDIR:-/tmp}/afm-api-feature-${SHORT_SHA}.tar.gz"
 BACKUP_FORMULA=""
 CREATED_TAP=0
@@ -45,6 +49,7 @@ cleanup() {
     brew untap "$TAP_NAME" >/dev/null 2>&1 || true
   fi
 
+  rm -rf "$STAGE_DIR"
   rm -f "$TARBALL"
 }
 trap cleanup EXIT
@@ -60,9 +65,17 @@ if [[ -f "$FORMULA_PATH" ]]; then
   cp "$FORMULA_PATH" "$BACKUP_FORMULA"
 fi
 
-git -C "$REPO_ROOT" archive --format=tar.gz -o "$TARBALL" HEAD
+AFM_API_SOURCE_ROOT="$REPO_ROOT" "$REPO_ROOT/bin/afm-api" build >/dev/null
+
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR"
+cp "$REPO_ROOT/bin/afm-api" "$STAGE_DIR/afm-api"
+cp "$REPO_ROOT/.build/release/afm-api-server" "$STAGE_DIR/afm-api-server"
+chmod +x "$STAGE_DIR/afm-api" "$STAGE_DIR/afm-api-server"
+sed -i '' "s/__AFM_API_VERSION__/${VERSION}/g" "$STAGE_DIR/afm-api"
+
+tar -czf "$TARBALL" -C "$STAGE_DIR" afm-api afm-api-server
 SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
-VERSION="0.0.0-feature.${SHORT_SHA}"
 
 cat > "$FORMULA_PATH" <<EOF
 class AfmApi < Formula
@@ -76,23 +89,25 @@ class AfmApi < Formula
   depends_on :macos
 
   def install
-    bin.install "bin/afm-api"
-    pkgshare.install "Package.swift"
-    pkgshare.install "Sources"
+    bin.install "afm-api"
+    bin.install "afm-api-server"
   end
 
   test do
     assert_predicate bin/"afm-api", :exist?
-    assert_predicate pkgshare/"Package.swift", :exist?
-    assert_predicate pkgshare/"Sources/AFMAPI/main.swift", :exist?
+    assert_predicate bin/"afm-api-server", :exist?
   end
 end
 EOF
 
-brew reinstall --build-from-source "${TAP_NAME}/${FORMULA_NAME}" >/dev/null
+brew reinstall "${TAP_NAME}/${FORMULA_NAME}" >/dev/null 2>&1 || true
+brew list --versions "${FORMULA_NAME}" >/dev/null 2>&1 || {
+  echo "FAIL: Homebrew formula install did not succeed for ${TAP_NAME}/${FORMULA_NAME}"
+  exit 1
+}
 
 afm-api --stop >/dev/null 2>&1 || true
-afm-api --rebuild --background >/dev/null
+afm-api --background >/dev/null
 sleep 1
 curl -sf "http://127.0.0.1:8000/v1/health" >/dev/null
 afm-api --stop >/dev/null 2>&1 || true
