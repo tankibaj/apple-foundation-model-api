@@ -59,6 +59,7 @@ afm-api --background      # Run in background
 afm-api --status          # Check status
 afm-api --logs            # View logs
 afm-api --stop            # Stop server
+afm-api --version         # Show build/version
 afm-api --rebuild         # Rebuild server binary from source
 ```
 
