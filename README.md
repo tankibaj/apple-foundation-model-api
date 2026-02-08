@@ -241,6 +241,16 @@ brew update
 brew upgrade afm-api
 ```
 
+**Automated Homebrew updates (maintainers)**
+```bash
+# Required once in apple-foundation-model-api repo settings:
+# secret: HOMEBREW_TAP_TOKEN (PAT with write access to tankibaj/homebrew-tap)
+#
+# Then every GitHub Release (vX.Y.Z) auto-updates:
+# - Formula/afm-api.rb
+# - Formula/afm-api@X.Y.rb
+```
+
 ---
 ## What's coming soon
 
