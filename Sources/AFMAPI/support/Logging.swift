@@ -1,55 +1,108 @@
 import Foundation
 import Darwin
 
-let logFilePath = ProcessInfo.processInfo.environment["AFM_API_LOG_FILE"]
-let logMaxBytes = Int64(ProcessInfo.processInfo.environment["AFM_API_LOG_MAX_BYTES"] ?? "") ?? 10 * 1024 * 1024
-let logMaxFilesRaw = Int(ProcessInfo.processInfo.environment["AFM_API_LOG_MAX_FILES"] ?? "") ?? 3
-let logMaxFiles = max(1, logMaxFilesRaw)
-let logFileLock = NSLock()
-let stdoutIsTTY = isatty(fileno(stdout)) == 1
+final class RuntimeLogger {
+    static let shared = RuntimeLogger()
 
-func rotateLogIfNeeded(path: String) {
-    guard logMaxBytes > 0 else { return }
-    guard FileManager.default.fileExists(atPath: path) else { return }
+    private let logFilePath: String?
+    private let logMaxBytes: Int64
+    private let logMaxFiles: Int
+    private let stdoutIsTTY: Bool
+    private let queue = DispatchQueue(label: "afm-api.runtime-logger", qos: .utility)
+    private let fm = FileManager.default
 
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-          let sizeNum = attrs[.size] as? NSNumber else {
-        return
+    private var fileHandle: FileHandle?
+    private var fileSize: Int64 = 0
+
+    private init() {
+        self.logFilePath = ProcessInfo.processInfo.environment["AFM_API_LOG_FILE"]
+        self.logMaxBytes = Int64(ProcessInfo.processInfo.environment["AFM_API_LOG_MAX_BYTES"] ?? "") ?? 10 * 1024 * 1024
+        let logMaxFilesRaw = Int(ProcessInfo.processInfo.environment["AFM_API_LOG_MAX_FILES"] ?? "") ?? 3
+        self.logMaxFiles = max(1, logMaxFilesRaw)
+        self.stdoutIsTTY = isatty(fileno(stdout)) == 1
+
+        guard let path = logFilePath, !path.isEmpty else { return }
+        openHandle(path: path)
     }
 
-    let size = sizeNum.int64Value
-    guard size >= logMaxBytes else { return }
+    deinit {
+        try? fileHandle?.close()
+    }
 
-    let fm = FileManager.default
-    for idx in stride(from: logMaxFiles - 1, through: 0, by: -1) {
-        let src = idx == 0 ? path : "\(path).\(idx)"
-        let dst = "\(path).\(idx + 1)"
+    func log(_ message: String) {
+        guard stdoutIsTTY || (logFilePath?.isEmpty == false) else { return }
+        queue.async { [self] in
+            if stdoutIsTTY {
+                fputs(message + "\n", stdout)
+            }
+            guard let path = logFilePath, !path.isEmpty else { return }
+            guard let data = (message + "\n").data(using: .utf8) else { return }
 
-        guard fm.fileExists(atPath: src) else { continue }
-        if fm.fileExists(atPath: dst) {
-            try? fm.removeItem(atPath: dst)
+            rotateIfNeeded(path: path, incomingBytes: Int64(data.count))
+            if fileHandle == nil {
+                openHandle(path: path)
+            }
+            guard let handle = fileHandle else { return }
+
+            do {
+                _ = try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                fileSize += Int64(data.count)
+            } catch {
+                try? handle.close()
+                fileHandle = nil
+            }
         }
-        try? fm.moveItem(atPath: src, toPath: dst)
+    }
+
+    private func openHandle(path: String) {
+        let url = URL(fileURLWithPath: path)
+        let dir = url.deletingLastPathComponent().path
+        try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        if !fm.fileExists(atPath: path) {
+            fm.createFile(atPath: path, contents: nil)
+        }
+
+        if let attrs = try? fm.attributesOfItem(atPath: path),
+           let sizeNum = attrs[.size] as? NSNumber {
+            fileSize = sizeNum.int64Value
+        } else {
+            fileSize = 0
+        }
+
+        do {
+            fileHandle = try FileHandle(forWritingTo: url)
+            _ = try fileHandle?.seekToEnd()
+        } catch {
+            fileHandle = nil
+        }
+    }
+
+    private func rotateIfNeeded(path: String, incomingBytes: Int64) {
+        guard logMaxBytes > 0 else { return }
+        guard fileSize + incomingBytes >= logMaxBytes else { return }
+
+        try? fileHandle?.close()
+        fileHandle = nil
+
+        for idx in stride(from: logMaxFiles - 1, through: 0, by: -1) {
+            let src = idx == 0 ? path : "\(path).\(idx)"
+            let dst = "\(path).\(idx + 1)"
+
+            guard fm.fileExists(atPath: src) else { continue }
+            if fm.fileExists(atPath: dst) {
+                try? fm.removeItem(atPath: dst)
+            }
+            try? fm.moveItem(atPath: src, toPath: dst)
+        }
+
+        fm.createFile(atPath: path, contents: nil)
+        fileSize = 0
+        openHandle(path: path)
     }
 }
 
 func logLine(_ message: String) {
-    if stdoutIsTTY {
-        print(message)
-    }
-    guard let path = logFilePath, !path.isEmpty else { return }
-    logFileLock.lock()
-    defer { logFileLock.unlock() }
-    let line = message + "\n"
-    guard let data = line.data(using: .utf8) else { return }
-    rotateLogIfNeeded(path: path)
-    if FileManager.default.fileExists(atPath: path) {
-        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: path)) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        }
-    } else {
-        FileManager.default.createFile(atPath: path, contents: data)
-    }
+    RuntimeLogger.shared.log(message)
 }

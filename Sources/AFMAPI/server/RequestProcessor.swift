@@ -1,5 +1,10 @@
 import Foundation
 
+private let requestLogsEnabled: Bool = {
+    let value = ProcessInfo.processInfo.environment["AFM_API_REQUEST_LOGS"]?.lowercased() ?? "1"
+    return value != "0" && value != "false" && value != "off"
+}()
+
 final class RequestProcessor {
     let cfg: AppConfig
 
@@ -11,7 +16,9 @@ final class RequestProcessor {
         let started = Date()
         func finish(_ status: Int, _ payload: Any) -> Data {
             let ms = Int(Date().timeIntervalSince(started) * 1000.0)
-            logLine("[\(status)] \(method) \(path) \(ms)ms")
+            if requestLogsEnabled {
+                logLine("[\(status)] \(method) \(path) \(ms)ms")
+            }
             return httpResponse(status: status, body: jsonData(payload))
         }
 
