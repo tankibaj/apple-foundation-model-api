@@ -2,6 +2,8 @@
 
 > Apple Intelligence API that follows OpenAI API standards, runs entirely on your Mac with full tool calling for building agents.
 
+[More about afm-api](https://thenaim.com/projects/afm-api/)
+
 ---
 
 ## Quick start
